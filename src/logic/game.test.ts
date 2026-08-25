@@ -96,6 +96,50 @@ describe('step: starting and moving', () => {
   })
 })
 
+describe('step: moves in every direction (AC3)', () => {
+  it('moves right by default', () => {
+    const state = step(freshGame())
+    const head = headOf(state)
+    const moved = step(state)
+    expect(moved.direction).toBe('right')
+    expect(moved.snake[0]).toEqual({ x: head.x + 1, y: head.y })
+  })
+
+  it('moves up after a valid turn', () => {
+    let state = step(freshGame())
+    state = step(state, { type: 'direction', direction: 'up' })
+    state = step(state)
+    const head = headOf(state)
+    const moved = step(state)
+    expect(moved.direction).toBe('up')
+    expect(moved.snake[0]).toEqual({ x: head.x, y: head.y - 1 })
+  })
+
+  it('moves down after a valid turn', () => {
+    let state = step(freshGame())
+    state = step(state, { type: 'direction', direction: 'down' })
+    state = step(state)
+    const head = headOf(state)
+    const moved = step(state)
+    expect(moved.direction).toBe('down')
+    expect(moved.snake[0]).toEqual({ x: head.x, y: head.y + 1 })
+  })
+
+  it('moves left after two valid turns', () => {
+    // 'right' cannot turn directly into 'left' (180-degree reversal), so
+    // reach it via an intermediate perpendicular turn, same as a player would.
+    let state = step(freshGame())
+    state = step(state, { type: 'direction', direction: 'down' })
+    state = step(state)
+    state = step(state, { type: 'direction', direction: 'left' })
+    state = step(state)
+    const head = headOf(state)
+    const moved = step(state)
+    expect(moved.direction).toBe('left')
+    expect(moved.snake[0]).toEqual({ x: head.x - 1, y: head.y })
+  })
+})
+
 describe('step: turning', () => {
   it('applies a valid perpendicular turn on the next tick', () => {
     const state = step(freshGame())
@@ -170,6 +214,29 @@ describe('step: collisions', () => {
   })
 })
 
+describe('step: game over is final (AC9)', () => {
+  it('ignores direction, pause and resume once the game is over, only restart works', () => {
+    const tinyConfig: GameConfig = { gridWidth: 5, gridHeight: 5 }
+    let state = freshGame(tinyConfig, 3)
+    state = step(state)
+    state = step(state)
+    state = step(state)
+    expect(state.status).toBe('over')
+
+    const afterDirection = step(state, { type: 'direction', direction: 'up' })
+    expect(afterDirection).toEqual(state)
+
+    const afterPause = step(state, { type: 'pause' })
+    expect(afterPause).toEqual(state)
+
+    const afterResume = step(state, { type: 'resume' })
+    expect(afterResume).toEqual(state)
+
+    const restarted = step(state, { type: 'restart' })
+    expect(restarted.status).toBe('ready')
+  })
+})
+
 describe('step: pause and resume', () => {
   it('halts movement while paused and resumes without an extra move', () => {
     const state = step(freshGame())
@@ -187,6 +254,36 @@ describe('step: pause and resume', () => {
 
     const movedAgain = step(resumed)
     expect(movedAgain.snake[0]).toEqual({ x: runningHead.x + 1, y: runningHead.y })
+  })
+
+  it('ignores a direction input that arrives while paused (AC11)', () => {
+    const running = step(freshGame())
+    const paused = step(running, { type: 'pause' })
+    expect(paused.queuedDirection).toBeNull()
+
+    const ignored = step(paused, { type: 'direction', direction: 'down' })
+    expect(ignored.status).toBe('paused')
+    expect(ignored.queuedDirection).toBeNull()
+
+    const resumed = step(ignored, { type: 'resume' })
+    const head = headOf(resumed)
+    const moved = step(resumed)
+    expect(moved.direction).toBe('right')
+    expect(moved.snake[0]).toEqual({ x: head.x + 1, y: head.y })
+  })
+
+  it('keeps a direction queued before pausing valid after resume (no over-correction)', () => {
+    const running = step(freshGame())
+    const queued = step(running, { type: 'direction', direction: 'down' })
+    const paused = step(queued, { type: 'pause' })
+    expect(paused.queuedDirection).toBe('down')
+
+    const resumed = step(paused, { type: 'resume' })
+    expect(resumed.queuedDirection).toBe('down')
+    const head = headOf(resumed)
+    const moved = step(resumed)
+    expect(moved.direction).toBe('down')
+    expect(moved.snake[0]).toEqual({ x: head.x, y: head.y + 1 })
   })
 })
 

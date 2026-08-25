@@ -126,6 +126,14 @@ export function createGame(config: GameConfig, rng: Rng): GameState {
   const snake = buildInitialSnake(config)
   const direction: Direction = 'right'
   const food = pickFoodPosition(config, snake, rng)
+  // `snake`/`food` and `initial.snake`/`initial.food` intentionally share
+  // the same array/object references here. That is safe only because every
+  // mutation path in this module produces new arrays/objects (`advance`
+  // builds `nextSnake` via spread, `restart` reads from `initial` without
+  // ever writing into it) — nothing in `src/logic` mutates in place. If a
+  // future change introduces in-place mutation, this sharing would leak
+  // between live state and the restart snapshot; keep it immutable or
+  // clone explicitly here.
   const initial: GameSnapshot = { snake, direction, food }
 
   return {
