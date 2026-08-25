@@ -10,7 +10,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['**/*.ts'],
+    files: ['**/*.{ts,mts,cts}'],
     plugins: {
       import: importPlugin,
     },
@@ -47,18 +47,40 @@ export default tseslint.config(
     // (issue #1, Implementation Decisions: "Zufall wird injiziert" /
     // "Zeit wird nicht injiziert, sondern ausgeschlossen").
     //
-    // ALLOW-LIST, not deny-list: `no-undef` is off project-wide via
-    // typescript-eslint's recommended config, so it's re-enabled here with
-    // a minimal, explicit set of permitted globals. Anything not granted —
-    // crypto, localStorage, sessionStorage, navigator, fetch, setTimeout,
-    // setInterval, requestAnimationFrame, window, document, ... — is an
-    // error by default, including anything invented later, because it was
-    // never added to the grant list. `globalThis` is explicitly revoked
-    // too, even though `languageOptions.ecmaVersion` would otherwise grant
-    // it automatically: it's a generic escape hatch back to every other
-    // global (e.g. `globalThis.Math.random()`), so leaving it available
-    // would undermine the allow-list itself.
-    files: ['src/logic/**/*.ts'],
+    // WHY THIS IS AN ALLOW-LIST, NOT A DENY-LIST: a deny-list has to be
+    // extended every time someone invents a new route to impurity (a new
+    // Web API, a new Node built-in, a new indirection trick) — it only
+    // protects against routes someone already thought of. An allow-list
+    // fails closed: anything not explicitly granted is an error, including
+    // anything invented later. That property is the entire point of this
+    // guard and is why it's built this way rather than as a longer
+    // no-restricted-globals/no-restricted-properties list. See the history
+    // of this block (two prior review rounds) for what a deny-list missed:
+    // window/document escapes, Math.random, then new Date().getTime(),
+    // crypto.getRandomValues, globalThis.Math.random(), setTimeout,
+    // localStorage, then Node built-in imports (node:crypto, node:perf_hooks,
+    // bare 'crypto') and .mts/.cts files. Each round closed a category, not
+    // one example — that's the allow-list model working as intended.
+    //
+    // `no-undef` is off project-wide via typescript-eslint's recommended
+    // config, so it's re-enabled here with a minimal, explicit set of
+    // permitted globals. Anything not granted — crypto, localStorage,
+    // sessionStorage, navigator, fetch, setTimeout, setInterval,
+    // requestAnimationFrame, window, document, ... — is an error by
+    // default. `globalThis` is explicitly revoked too, even though
+    // `languageOptions.ecmaVersion` would otherwise grant it automatically:
+    // it's a generic escape hatch back to every other global (e.g.
+    // `globalThis.Math.random()`), so leaving it available would undermine
+    // the allow-list itself.
+    //
+    // KNOWN CEILING: this is lint-based enforcement, not a sandbox. Runtime
+    // reflection through `.constructor` (e.g.
+    // `Array.constructor("return globalThis")()`) is not caught and is not
+    // worth chasing — closing it costs more (banning `.constructor` property
+    // access generally) than it buys (deliberately obfuscated code is not
+    // the threat model here; a plausible contributor reaching for a Web API
+    // or a Node built-in is).
+    files: ['src/logic/**/*.{ts,mts,cts}'],
     languageOptions: {
       globals: {
         // Deliberately permitted pure, deterministic built-ins.
@@ -104,6 +126,12 @@ export default tseslint.config(
           message: 'Inject an rng parameter instead of reading Math.random in logic.',
         },
       ],
+      // Globals alone don't cover this: `import { randomInt } from
+      // 'node:crypto'` or `import crypto from 'crypto'` is a module-scoped
+      // binding, not a global reference, so no-undef never sees it. Node
+      // built-ins are exactly the kind of impurity a contributor reaches
+      // for before internalising the injected-rng convention.
+      'import/no-nodejs-modules': 'error',
     },
   },
 );

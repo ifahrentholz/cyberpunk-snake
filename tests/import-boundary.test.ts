@@ -242,3 +242,123 @@ describe('src/logic stays free of the DOM, Math.random and the clock (allow-list
     expect(result.messages).toEqual([]);
   });
 });
+
+describe('src/logic cannot reach impurity through Node.js built-in imports', () => {
+  // Globals alone don't see these: `import { randomInt } from 'node:crypto'`
+  // is a module-scoped binding, not a global reference, so no-undef never
+  // flags it. import/no-nodejs-modules closes that route.
+  const nodeBuiltinImports: Record<string, string> = {
+    "'node:crypto' (named import)": "import { randomInt } from 'node:crypto';\nexport const x = randomInt;\n",
+    "'node:perf_hooks' (named import)": "import { performance } from 'node:perf_hooks';\nexport const x = performance;\n",
+    "bare 'crypto' (default import)": "import crypto from 'crypto';\nexport const x = crypto;\n",
+  };
+
+  it.each(Object.entries(nodeBuiltinImports))('flags an import of %s', async (_name, code) => {
+    const result = await lintAsFile(createLinter(), path.resolve(repoRoot, 'src/logic/node-bypass.ts'), code);
+
+    expect(ruleIds(result)).toContain('import/no-nodejs-modules');
+  });
+});
+
+describe('the guard also applies to .mts and .cts files under src/logic', () => {
+  // Confirmed gap: before widening the `files` globs, neither config block
+  // matched src/logic/*.mts or *.cts, so none of the above guarantees held
+  // there at all.
+  it('flags the clock in a .mts file', async () => {
+    const result = await lintAsFile(
+      createLinter(),
+      path.resolve(repoRoot, 'src/logic/bypass.mts'),
+      'export const x = new Date().getTime();\n',
+    );
+
+    expect(ruleIds(result)).toContain('no-restricted-globals');
+  });
+
+  it('flags the clock in a .cts file', async () => {
+    const result = await lintAsFile(
+      createLinter(),
+      path.resolve(repoRoot, 'src/logic/bypass.cts'),
+      'export const x = new Date().getTime();\n',
+    );
+
+    expect(ruleIds(result)).toContain('no-restricted-globals');
+  });
+
+  it('flags an import-boundary violation in a nested .mts file', async () => {
+    const result = await lintAsFile(
+      createLinter(),
+      path.resolve(repoRoot, 'src/logic/nested/bypass.mts'),
+      "import { rendererPlaceholder } from '../../renderer';\nexport const x = rendererPlaceholder;\n",
+    );
+
+    expect(ruleIds(result)).toContain('import/no-restricted-paths');
+  });
+});
+
+describe('guarantee: a realistic pure reducer still lints completely clean', () => {
+  // This is the point of the whole allow-list: it must stay usable for the
+  // real reducer that issue #3 writes next, with no eslint-disable needed.
+  // If a future fix to this guard breaks this test, the fix is wrong.
+  it('lints a reducer using interfaces, a union type, Set, Math.floor, throw, spread, ?? and array methods clean', async () => {
+    const code = [
+      "export type Direction = 'up' | 'down' | 'left' | 'right';",
+      '',
+      'export interface Cell {',
+      '  readonly x: number;',
+      '  readonly y: number;',
+      '}',
+      '',
+      'export interface Snake {',
+      '  readonly segments: readonly Cell[];',
+      '  readonly direction: Direction;',
+      '}',
+      '',
+      'const OPPOSITES: Record<Direction, Direction> = {',
+      "  up: 'down',",
+      "  down: 'up',",
+      "  left: 'right',",
+      "  right: 'left',",
+      '};',
+      '',
+      'export function isOpposite(a: Direction, b: Direction): boolean {',
+      '  return OPPOSITES[a] === b;',
+      '}',
+      '',
+      'export function nextHead(snake: Snake): Cell {',
+      '  const head = snake.segments[0];',
+      '  if (!head) {',
+      "    throw new Error('snake has no segments');",
+      '  }',
+      '  const deltas: Record<Direction, Cell> = {',
+      '    up: { x: 0, y: -1 },',
+      '    down: { x: 0, y: 1 },',
+      '    left: { x: -1, y: 0 },',
+      '    right: { x: 1, y: 0 },',
+      '  };',
+      '  const delta = deltas[snake.direction];',
+      '  return { x: head.x + delta.x, y: head.y + delta.y };',
+      '}',
+      '',
+      'export function occupiedCells(snake: Snake): Set<string> {',
+      '  return new Set(snake.segments.map((cell) => `${cell.x},${cell.y}`));',
+      '}',
+      '',
+      'export function pickFreeCellIndex(freeCellCount: number, rng: () => number): number {',
+      '  return Math.floor(rng() * freeCellCount);',
+      '}',
+      '',
+      'export function scoreAfterEating(score: number | undefined): number {',
+      '  return (score ?? 0) + 1;',
+      '}',
+      '',
+      'export function withGrown(snake: Snake, extra: readonly Cell[]): Snake {',
+      '  return { ...snake, segments: [...snake.segments, ...extra] };',
+      '}',
+      '',
+    ].join('\n');
+
+    const result = await lintAsFile(createLinter(), path.resolve(repoRoot, 'src/logic/ok-realistic-reducer.ts'), code);
+
+    expect(result.messages).toEqual([]);
+  });
+});
