@@ -207,6 +207,13 @@ export function step(state: GameState, action?: GameAction): GameState {
   }
 
   if (effectiveAction.type === 'direction') {
+    // AC11: direction inputs are not silently buffered while paused — a
+    // resume must not surprise the player with a turn they queued blind.
+    // A direction queued *before* pausing stays valid and is unaffected:
+    // `pause` never touches `queuedDirection` (see below).
+    if (state.status === 'paused') {
+      return state
+    }
     return { ...state, queuedDirection: effectiveAction.direction }
   }
 
