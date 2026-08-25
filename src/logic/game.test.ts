@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createGame, step, type GameConfig, type GameState, type Rng } from './game'
+import {
+  createGame,
+  step,
+  type GameConfig,
+  type GameState,
+  type Position,
+  type Rng,
+} from './game'
 
 /**
  * Deterministic linear-congruential generator. No `Math.random`, no
@@ -15,6 +22,14 @@ function createSeededRng(seed: number): Rng {
     state = (state * 16807) % 2147483647
     return (state - 1) / 2147483646
   }
+}
+
+function headOf(state: GameState): Position {
+  const head = state.snake[0]
+  if (!head) {
+    throw new Error('Snake has no segments')
+  }
+  return head
 }
 
 const baseConfig: GameConfig = { gridWidth: 28, gridHeight: 28 }
@@ -65,7 +80,7 @@ describe('createGame', () => {
 describe('step: starting and moving', () => {
   it('transitions from ready to running on the first tick and moves the head', () => {
     const state = freshGame()
-    const head = state.snake[0]
+    const head = headOf(state)
     const next = step(state)
     expect(next.status).toBe('running')
     expect(next.snake[0]).toEqual({ x: head.x + 1, y: head.y })
@@ -74,7 +89,7 @@ describe('step: starting and moving', () => {
 
   it('keeps moving forward, one cell per tick, without changing length', () => {
     let state = step(freshGame())
-    const firstHead = state.snake[0]
+    const firstHead = headOf(state)
     state = step(state)
     expect(state.snake[0]).toEqual({ x: firstHead.x + 1, y: firstHead.y })
     expect(state.snake.length).toBe(3)
@@ -84,7 +99,7 @@ describe('step: starting and moving', () => {
 describe('step: turning', () => {
   it('applies a valid perpendicular turn on the next tick', () => {
     const state = step(freshGame())
-    const head = state.snake[0]
+    const head = headOf(state)
     const turned = step(state, { type: 'direction', direction: 'up' })
     expect(turned.direction).toBe('right')
     const moved = step(turned)
@@ -94,7 +109,7 @@ describe('step: turning', () => {
 
   it('ignores a direct 180-degree reversal and keeps the previous direction', () => {
     const state = step(freshGame())
-    const head = state.snake[0]
+    const head = headOf(state)
     const reversed = step(state, { type: 'direction', direction: 'left' })
     const moved = step(reversed)
     expect(moved.direction).toBe('right')
@@ -109,7 +124,7 @@ describe('step: turning', () => {
     // implementation checks against the last *executed* direction ('right')
     // and must reject it, or the snake would reverse into itself.
     const state = step(freshGame())
-    const head = state.snake[0]
+    const head = headOf(state)
     const queuedUp = step(state, { type: 'direction', direction: 'up' })
     const queuedLeft = step(queuedUp, { type: 'direction', direction: 'left' })
     const moved = step(queuedLeft)
@@ -142,11 +157,14 @@ describe('step: collisions', () => {
   it('ends the game on self-collision when the snake loops into its own body', () => {
     const config: GameConfig = { gridWidth: 28, gridHeight: 28, initialSnakeLength: 5 }
     let state = freshGame(config, 11)
-    state = step(state) // continue right
+    state = step(state) // tick: continue right
     state = step(state, { type: 'direction', direction: 'down' })
+    state = step(state) // tick: turn down
     state = step(state, { type: 'direction', direction: 'left' })
+    state = step(state) // tick: turn left
     const beforeCollision = state
     state = step(state, { type: 'direction', direction: 'up' })
+    state = step(state) // tick: attempt up -> loops into own body
     expect(state.status).toBe('over')
     expect(state.snake).toEqual(beforeCollision.snake)
   })
@@ -154,8 +172,8 @@ describe('step: collisions', () => {
 
 describe('step: pause and resume', () => {
   it('halts movement while paused and resumes without an extra move', () => {
-    let state = step(freshGame())
-    const runningHead = state.snake[0]
+    const state = step(freshGame())
+    const runningHead = headOf(state)
     const paused = step(state, { type: 'pause' })
     expect(paused.status).toBe('paused')
 
@@ -208,7 +226,7 @@ describe('step: food is inert in this slice', () => {
     // the head onto it: score and snake length must stay unchanged.
     const config: GameConfig = { gridWidth: 28, gridHeight: 28 }
     const state = freshGame(config, 9)
-    const head = state.snake[0]
+    const head = headOf(state)
     const foodAhead: GameState = { ...state, food: { x: head.x + 1, y: head.y } }
 
     const onFood = step(foodAhead)

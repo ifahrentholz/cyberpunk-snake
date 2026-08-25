@@ -114,7 +114,11 @@ function pickFoodPosition(
     emptyCells.length - 1,
     Math.floor(rng() * emptyCells.length),
   )
-  return emptyCells[index]
+  const cell = emptyCells[index]
+  if (!cell) {
+    throw new Error('No empty cell available for food placement')
+  }
+  return cell
 }
 
 /** Creates the initial, pure game state. Ready to run, not yet moving. */
@@ -162,6 +166,9 @@ function advance(state: GameState): GameState {
   const direction = resolveMoveDirection(state)
   const delta = DELTA[direction]
   const currentHead = state.snake[0]
+  if (!currentHead) {
+    throw new Error('Snake has no segments')
+  }
   const nextHead: Position = {
     x: currentHead.x + delta.x,
     y: currentHead.y + delta.y,
