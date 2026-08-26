@@ -29,3 +29,17 @@ contributing to the project — not the reasoning itself.
   including a pause-buffering bug (AC11) found and fixed during review
   and the `initialSnakeLength` config addition needed to make
   self-collision (AC8) reachable through the public API at all.
+- Keyboard input binding (#5): `keyToAction` (pure key+status → action
+  mapper) and `bindKeyboard` (the `keydown` DOM seam) exist and are fully
+  tested — 34 unit tests against a fake event target plus 1 integration
+  test against a real `keydown` dispatch on `document`. **This ticket
+  produces no playable change.** The keyboard layer exists but nothing
+  drives it yet: there is still no tick loop and no renderer, so a player
+  sees nothing new until #6 lands and wires this layer up. Once it is
+  wired: arrow keys and WASD steer the snake, Space pauses and resumes,
+  `R` restarts, holding a key down does not cause a pause flicker (OS
+  key-repeat is ignored), and browser/OS shortcuts that share a key —
+  Cmd/Ctrl+R, Ctrl+A, Cmd/Ctrl+W, Cmd+S — keep working normally instead of
+  being swallowed. See `docs/adr/0003-keyboard-input-binding.md` for the
+  reasoning behind the pause/resume toggle placement and the two input
+  guards.
