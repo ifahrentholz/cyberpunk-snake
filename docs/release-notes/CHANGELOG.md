@@ -43,3 +43,30 @@ contributing to the project — not the reasoning itself.
   being swallowed. See `docs/adr/0003-keyboard-input-binding.md` for the
   reasoning behind the pause/resume toggle placement and the two input
   guards.
+- Food placement, growth and scoring (#4): the reducer now eats, grows and
+  scores. `pickFoodPosition` (enumeration-based, not rejection sampling, so
+  it terminates even on a nearly-full grid) is reused from #3 and now also
+  runs mid-tick, after a food check inserted into the existing collision
+  sequence: a head landing on food grows the snake by one segment, adds one
+  to `score`, and immediately respawns food onto a free cell that avoids
+  the grown snake entirely. A non-eating tick behaves exactly as it did
+  under #3. **Breaking API change**: the `tick` action now requires an
+  `rng: Rng` field (`{ type: 'tick', rng }`), and `step`'s `action`
+  parameter is no longer optional — the previous `action ?? { type: 'tick'
+  }` default is gone, so any code still calling `step(state)` or
+  `step(state, { type: 'tick' })` needs updating. `rng` is drawn exactly
+  once per eating tick and never otherwise (verified with a call-counting
+  wrapper). Also worth knowing: on a completely full grid, food placement
+  throws rather than declaring a win — there is no win condition in the
+  spec and none was added; on the standard 28×28 grid this needs 784
+  snake segments, and handling the throw at the tick-loop level is
+  explicitly carried by #6, not this ticket. **Still nothing playable.**
+  All of this lives in the pure logic layer only; there is still no tick
+  loop and no renderer driving it, so a player sees nothing new until #6
+  wires movement, input and food together on screen. See
+  `docs/adr/0004-food-placement-growth-and-scoring.md` for the mandatory-
+  `rng` decision, the fixed collision-then-growth tick order and the
+  tail/food edge case it creates, and a test-strength finding: two
+  occupied-cell tests stayed green with the occupied-cell filter disabled
+  entirely, and had to be rewritten around a grid with exactly one legal
+  free cell to actually catch that mutation.
