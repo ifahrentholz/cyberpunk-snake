@@ -23,6 +23,10 @@ import type { GameAction, GameStatus } from '../logic/game';
  * Maps a keyboard key to the `GameAction` it represents, or `null` if the
  * key is not bound to anything. Letter keys are matched case-insensitively
  * so caps lock does not break movement or restart.
+ *
+ * Deliberately takes only `(key, status)`, not a `KeyboardEvent` — modifier
+ * and repeat handling are DOM/browser concerns and live in `bindKeyboard`'s
+ * `handleKeyDown`, not here, so this mapper stays free of DOM types.
  */
 export function keyToAction(key: string, status: GameStatus): GameAction | null {
   switch (key) {
@@ -65,15 +69,41 @@ export interface KeyboardBindingOptions {
  * Attaches a `keydown` listener to `target` that maps each key through
  * `keyToAction` and forwards recognised actions to `dispatch`.
  *
- * `preventDefault()` is called only for keys that actually map to an
- * action — arrows and Space would otherwise scroll the page — so unbound
- * keys are left alone.
+ * Two guards run before the mapper, both bailing out with no dispatch and
+ * no `preventDefault()`:
+ *
+ * - Modifier guard (`ctrlKey`/`metaKey`/`altKey`): without it, browser/OS
+ *   shortcuts collide with our bindings — Cmd/Ctrl+R would map to
+ *   `restart` and swallow the reload shortcut, Ctrl+A to `left`, etc.
+ *   Suppressing `preventDefault()` here matters as much as suppressing the
+ *   dispatch: swallowing the browser's own shortcut is the harm. `shiftKey`
+ *   is deliberately excluded — no browser shortcut or game meaning collides
+ *   with Shift+Arrow or Shift+letter, so guarding it would only cost a
+ *   player who holds Shift their control of the snake for no reason.
+ * - Repeat guard (`event.repeat`): OS key-repeat re-fires `keydown` while a
+ *   key is held. That is harmless for directions/restart (re-queuing the
+ *   same value is idempotent) but not for Space: `keyToAction` recomputes
+ *   the toggle from the live `getStatus()` on every event, so a held space
+ *   bar would produce a burst of alternating pause/resume dispatches whose
+ *   final effect depends on repeat-count parity. One press must be one
+ *   toggle, so repeats are ignored uniformly for every bound key rather
+ *   than singling Space out.
+ *
+ * `preventDefault()` itself is called only for keys that make it past both
+ * guards and map to an action — arrows and Space would otherwise scroll the
+ * page — so unbound keys are left alone.
  *
  * Returns an unbind function that removes the listener.
  */
 export function bindKeyboard({ target, getStatus, dispatch }: KeyboardBindingOptions): () => void {
   const handleKeyDown = (event: Event): void => {
     const keyboardEvent = event as KeyboardEvent;
+    if (keyboardEvent.ctrlKey || keyboardEvent.metaKey || keyboardEvent.altKey) {
+      return;
+    }
+    if (keyboardEvent.repeat) {
+      return;
+    }
     const action = keyToAction(keyboardEvent.key, getStatus());
     if (action === null) {
       return;
