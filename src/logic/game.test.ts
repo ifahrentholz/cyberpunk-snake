@@ -346,13 +346,24 @@ describe('step: restart', () => {
 
 describe('step: food placement (AC1, AC2, AC3)', () => {
   it('never places food on a cell occupied by the snake, across many draws', () => {
-    // A small grid with a long snake leaves few free cells, exercising the
-    // "draw from the free set" path (not rejection sampling) repeatedly.
-    const config: GameConfig = { gridWidth: 6, gridHeight: 6, initialSnakeLength: 4 }
-    for (let seed = 1; seed <= 20; seed += 1) {
+    // Stage-6 finding: a sparse grid (few occupied cells among many free
+    // ones) does not reliably catch a broken/removed occupied-cell filter,
+    // because most seeds land on a free cell anyway even without it. This
+    // grid leaves exactly ONE free cell, so a food draw is forced to be
+    // that cell EVERY time the filter is actually applied. If the filter
+    // were removed, `pickFoodPosition` would draw from all 3 cells
+    // uniformly, and 2 of the 3 are on the snake — across 30 fixed seeds
+    // the odds of every single draw coincidentally landing on the one
+    // legal cell are (1/3)^30, i.e. this reliably goes red on that
+    // mutation (verified: see the PR report for the probe).
+    const config: GameConfig = { gridWidth: 3, gridHeight: 1, initialSnakeLength: 2 }
+    for (let seed = 1; seed <= 30; seed += 1) {
       const state = freshGame(config, seed)
       const onSnake = state.snake.some((cell) => cell.x === state.food.x && cell.y === state.food.y)
       expect(onSnake).toBe(false)
+      // Only (2, 0) is free; with the filter in place the draw has no
+      // other legal choice, regardless of the seed.
+      expect(state.food).toEqual({ x: 2, y: 0 })
     }
   })
 
@@ -403,18 +414,41 @@ describe('step: eating food (AC4, AC5, AC6, AC7)', () => {
   })
 
   it('places new food on a free cell immediately after eating, never on the grown snake', () => {
-    const config: GameConfig = { gridWidth: 28, gridHeight: 28 }
-    const state = freshGame(config, 9)
-    const head = headOf(state)
-    const foodAhead: GameState = { ...state, food: { x: head.x + 1, y: head.y } }
+    // Same stage-6 finding, for the respawn-after-eating call site: growing
+    // this snake by one segment leaves exactly ONE free cell in the grid,
+    // so with the occupied-cell filter in place the respawn draw has no
+    // other legal choice, for any seed. Without the filter, the draw would
+    // pick uniformly among all 4 cells, 3 of which are on the grown snake —
+    // across 30 fixed seeds that is essentially certain to be caught
+    // (verified: see the PR report for the probe).
+    const config: GameConfig = { gridWidth: 4, gridHeight: 1 }
+    const snake: readonly Position[] = [
+      { x: 1, y: 0 }, // head
+      { x: 0, y: 0 }, // tail
+    ]
+    for (let seed = 1; seed <= 30; seed += 1) {
+      const state: GameState = {
+        status: 'running',
+        config,
+        snake,
+        direction: 'right',
+        queuedDirection: null,
+        food: { x: 2, y: 0 }, // directly ahead of the head: this tick eats
+        score: 0,
+        initial: { snake, direction: 'right', food: { x: 2, y: 0 } },
+      }
 
-    const onFood = step(foodAhead, tick(createSeededRng(3)))
+      const onFood = step(state, tick(createSeededRng(seed)))
 
-    expect(onFood.food).not.toEqual(foodAhead.food)
-    const onSnake = onFood.snake.some(
-      (cell) => cell.x === onFood.food.x && cell.y === onFood.food.y,
-    )
-    expect(onSnake).toBe(false)
+      expect(onFood.snake).toEqual([{ x: 2, y: 0 }, ...snake])
+      const onSnake = onFood.snake.some(
+        (cell) => cell.x === onFood.food.x && cell.y === onFood.food.y,
+      )
+      expect(onSnake).toBe(false)
+      // Only (3, 0) is free after growth; the draw has no other legal
+      // choice, regardless of the seed.
+      expect(onFood.food).toEqual({ x: 3, y: 0 })
+    }
   })
 
   it('removes the tail and leaves length and score unchanged when no food is eaten', () => {
