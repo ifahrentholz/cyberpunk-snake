@@ -24,10 +24,18 @@ describe('keyboard binding (integration)', () => {
       },
     });
 
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    // FIX 3 (review finding): unbind in `finally` so a failing assertion
+    // above still detaches the listener from `document`. Left attached, a
+    // failure here would leave a dangling listener that keeps reacting to
+    // keydowns dispatched by tests that run later in the same jsdom
+    // environment — inert today because this file holds exactly one test,
+    // but not the moment a second one is added.
+    try {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
 
-    expect(state.queuedDirection).toBe('up');
-
-    unbind();
+      expect(state.queuedDirection).toBe('up');
+    } finally {
+      unbind();
+    }
   });
 });
