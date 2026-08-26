@@ -46,7 +46,12 @@ export interface GameState {
 
 export type GameAction =
   | { readonly type: 'direction'; readonly direction: Direction }
-  | { readonly type: 'tick' }
+  // `rng` is mandatory, not optional: food respawn needs randomness at tick
+  // time, and `GameState` must stay serializable (it cannot carry an `Rng`
+  // itself). Making it required turns a forgotten argument into a compile
+  // error at every call site instead of a silent runtime gap. No internal
+  // fallback (no default, no `Math.random`) exists anywhere in this module.
+  | { readonly type: 'tick'; readonly rng: Rng }
   | { readonly type: 'pause' }
   | { readonly type: 'resume' }
   | { readonly type: 'restart' }
@@ -80,6 +85,10 @@ function isWithinGrid(position: Position, config: GameConfig): boolean {
 
 function isOccupied(position: Position, cells: readonly Position[]): boolean {
   return cells.some((cell) => cell.x === position.x && cell.y === position.y)
+}
+
+function samePosition(a: Position, b: Position): boolean {
+  return a.x === b.x && a.y === b.y
 }
 
 function buildInitialSnake(config: GameConfig): readonly Position[] {
@@ -170,7 +179,7 @@ function restart(state: GameState): GameState {
   }
 }
 
-function advance(state: GameState): GameState {
+function advance(state: GameState, rng: Rng): GameState {
   const direction = resolveMoveDirection(state)
   const delta = DELTA[direction]
   const currentHead = state.snake[0]
@@ -186,12 +195,35 @@ function advance(state: GameState): GameState {
     return { ...state, status: 'over' }
   }
 
+  // AC7 fixes this order: self collision is judged against the snake with
+  // its tail already dropped (the tail is about to vacate that cell on a
+  // normal move) — BEFORE it is known whether this tick eats food. That is
+  // deliberate, not an oversight: see the tail/food edge case note below.
   const body = state.snake.slice(0, state.snake.length - 1)
   if (isOccupied(nextHead, body)) {
     return { ...state, status: 'over' }
   }
 
-  const nextSnake = [nextHead, ...body]
+  const ateFood = samePosition(nextHead, state.food)
+
+  // Edge case: a new head landing exactly on the *current* tail cell is
+  // never a self collision (checked above, against `body`, tail excluded)
+  // regardless of whether this tick also eats food. If it turns out food
+  // is eaten in the same tick, the tail is not dropped (the snake grows),
+  // so `nextSnake` below would contain that tail cell twice for exactly
+  // one snapshot (as the new head, and still as the retained old tail) —
+  // an overlap, not a collision, self-correcting on the following tick
+  // once a non-eating tick drops that tail cell again. This is reachable
+  // only by directly constructing a state (see the dedicated test); it
+  // cannot arise from normal play, because food placement always avoids
+  // every cell of the snake at the moment it is placed (including the
+  // tail), and the head necessarily revisits any given cell before the
+  // tail can lag its way back onto it — so a live game can never have
+  // food sitting on the current tail's cell to begin with. Handled here,
+  // faithfully, per the mandated AC7 order; not reordered.
+  const nextSnake = ateFood ? [nextHead, ...state.snake] : [nextHead, ...body]
+  const food = ateFood ? pickFoodPosition(state.config, nextSnake, rng) : state.food
+  const score = ateFood ? state.score + 1 : state.score
 
   return {
     ...state,
@@ -199,14 +231,14 @@ function advance(state: GameState): GameState {
     snake: nextSnake,
     direction,
     queuedDirection: null,
+    food,
+    score,
   }
 }
 
-/** Advances the game by one action. Pure: no clock, no randomness. */
-export function step(state: GameState, action?: GameAction): GameState {
-  const effectiveAction: GameAction = action ?? { type: 'tick' }
-
-  if (effectiveAction.type === 'restart') {
+/** Advances the game by one action. Pure: no clock, no randomness of its own. */
+export function step(state: GameState, action: GameAction): GameState {
+  if (action.type === 'restart') {
     return restart(state)
   }
 
@@ -214,7 +246,7 @@ export function step(state: GameState, action?: GameAction): GameState {
     return state
   }
 
-  if (effectiveAction.type === 'direction') {
+  if (action.type === 'direction') {
     // AC11: direction inputs are not silently buffered while paused — a
     // resume must not surprise the player with a turn they queued blind.
     // A direction queued *before* pausing stays valid and is unaffected:
@@ -222,20 +254,20 @@ export function step(state: GameState, action?: GameAction): GameState {
     if (state.status === 'paused') {
       return state
     }
-    return { ...state, queuedDirection: effectiveAction.direction }
+    return { ...state, queuedDirection: action.direction }
   }
 
-  if (effectiveAction.type === 'pause') {
+  if (action.type === 'pause') {
     return state.status === 'running' ? { ...state, status: 'paused' } : state
   }
 
-  if (effectiveAction.type === 'resume') {
+  if (action.type === 'resume') {
     return state.status === 'paused' ? { ...state, status: 'running' } : state
   }
 
-  // effectiveAction.type === 'tick'
+  // action.type === 'tick'
   if (state.status === 'paused') {
     return state
   }
-  return advance(state)
+  return advance(state, action.rng)
 }
