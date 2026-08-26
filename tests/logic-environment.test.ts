@@ -18,6 +18,29 @@ import { describe, expect, it } from 'vitest';
  * legitimately needs a DOM opts in explicitly per the convention documented
  * in `vitest.config.ts` (worked example: `src/input/keyboard.integration.test.ts`)
  * — it does not touch this default.
+ *
+ * SCOPE OF WHAT THIS TRACKS (raised in #13 review): this sensor observes
+ * the single GLOBAL default, because today a single flat default is all
+ * there is. If a future ticket introduces per-directory environment
+ * scoping (Vitest's `environmentMatchGlobs`), this file could end up
+ * matched by whatever glob covers `tests/**` while `src/logic/**` — the
+ * thing this sensor actually exists to guard — is matched by a different
+ * glob, and the two would silently decouple without this test failing.
+ * Whoever introduces per-directory scoping must either relocate this
+ * sensor into `src/logic/` or add an equivalent one there.
+ *
+ * WHY THIS SENSOR IS MECHANISM-AGNOSTIC, NOT JUST A CONFIG-VALUE CHECK
+ * (also from #13 review, worth recording rather than re-deriving): the
+ * assertions below observe the actual runtime state (`typeof window`,
+ * `typeof document`, `typeof localStorage`) instead of reading the
+ * `environment` field out of the resolved config. That was verified to
+ * matter, not just be tidier: this test was confirmed to go red not only
+ * when the global default is flipped back to `jsdom`, but also under a
+ * `setupFiles` hook that assigns `globalThis.window`, and under a CLI
+ * `--environment=jsdom` override — and it would equally catch a future
+ * `environmentMatchGlobs` misconfiguration that hands this file a DOM.
+ * None of those regression routes require touching the `environment: '...'`
+ * string this test happens to sit near, which is exactly the point.
  */
 describe('logic suite runtime environment (issue #13)', () => {
   it('runs with no DOM present: window, document and localStorage are all undefined', () => {
