@@ -105,9 +105,20 @@ re-deriving trust in the config by inspection.
 
 ## Consequences
 
-- The reducer that later tickets write is testable without timers, jsdom
-  or flakiness, and the visual presentation can change later without
+- The reducer that later tickets write is testable without timers or
+  flakiness, and the visual presentation can change later without
   touching a single logic test — that's the payoff of the layer boundary.
+  **Correction (#13):** this bullet originally also said "without ...
+  jsdom", framing jsdom as something avoided. That was misleading rather
+  than strictly false — the reducer's tests never *needed* jsdom, but
+  `vitest.config.ts` defaulted every suite to `jsdom` regardless, so it
+  simply ran inside one, unused, until #13 scoped the test environment.
+  DOM purity is enforced statically, by the ESLint allow-list guard and
+  the import-boundary suite described above, and — since #13 —
+  additionally by the test environment itself: `vitest.config.ts` now
+  defaults every suite to `node`, so the logic layer's own tests run with
+  no DOM present, and a dedicated runtime check
+  (`tests/logic-environment.test.ts`) fails if that ever regresses.
 - Anyone tempted to "simplify" the purity guard back into a deny-list
   should read this ADR first: a deny-list must be extended for every
   newly invented route to impurity and therefore fails open by
