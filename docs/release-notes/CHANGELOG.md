@@ -70,3 +70,14 @@ contributing to the project — not the reasoning itself.
   occupied-cell tests stayed green with the occupied-cell filter disabled
   entirely, and had to be rewritten around a grid with exactly one legal
   free cell to actually catch that mutation.
+- Scoped the Vitest test environment (#13): the default is now `node`
+  instead of `jsdom` for every suite. A test file that genuinely needs a DOM
+  opts in per file with a `// @vitest-environment jsdom` pragma (see
+  `src/input/keyboard.integration.test.ts`); #6 and #7 will need the same
+  opt-in for canvas and `localStorage` work. No player-visible change:
+  previously the logic layer's own tests ran with a DOM present by accident
+  of configuration and nothing would have failed if they'd come to depend on
+  it; a new runtime guard (`tests/logic-environment.test.ts`, one more test,
+  102 total) now fails if that ever regresses. Side effect: the suite is
+  measurably faster (roughly 1.2s to 1.0s). See
+  `docs/adr/0005-scoped-test-environment.md`.
