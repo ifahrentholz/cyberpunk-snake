@@ -51,19 +51,45 @@ a project that keeps arriving at the same principle from different
 directions should be able to see that it did, which is the point of
 writing it down here rather than re-deriving it silently a third time.
 
-**`rng` is consumed only on a tick that actually eats food.** Verified
-empirically with a call-counting wrapper around a real `Rng`, not assumed
-from reading the code: one draw on a tick that lands on food, zero draws
-on a non-eating tick, zero on a wall-collision tick, zero on a
-self-collision tick, and zero on any tick while `status` is `'paused'`
-(paused ticks are a no-op in `step`, see ADR 0002's AC11 fix). This matters
-beyond the fact that it holds: if the number or timing of `rng` draws
-depended on tick history in some unspecified way, any future test that
-predicts an exact `rng` sequence for a scripted play-through would be
-fragile for a reason indistinguishable from ordinary flakiness, rather
-than for a reason traceable to a design defect. Pinning "exactly one draw
-per eat, never otherwise" up front is what keeps deterministic-sequence
-tests deterministic as the reducer grows.
+**`rng` is consumed only on a tick that actually eats food, and this is
+pinned by a committed test, not only known from a one-off check.** The
+`describe('step: rng draw count pins "exactly one draw per eat, never
+otherwise"')` block in `src/logic/game.test.ts` wraps a deterministic
+`Rng` in a call-counting shim and drives it through the public
+`createGame`/`step` seam only (it never reaches past that seam into the
+unexported `pickFoodPosition`), asserting: one draw on a tick that lands
+on food, zero draws on a non-eating tick, zero on a wall-collision tick,
+zero on a self-collision tick, and zero on a tick dispatched while
+`status` is `'paused'` (paused ticks are a no-op in `step`, see ADR 0002's
+AC11 fix). This matters beyond the fact that it holds: if the number or
+timing of `rng` draws depended on tick history in some unspecified way,
+any future test that predicts an exact `rng` sequence for a scripted
+play-through would be fragile for a reason indistinguishable from
+ordinary flakiness, rather than for a reason traceable to a design
+defect. Pinning "exactly one draw per eat, never otherwise" in a
+committed test, rather than only in a reviewer's memory, is what keeps
+deterministic-sequence tests deterministic as the reducer grows.
+
+Verified by mutation, following the precedent ADR 0002 set of recording
+*how* a claim was checked, not just asserting that it was: inserting an
+unconditional, speculative `rng()` call at the top of `advance` turns
+four of the five cases red (eat, non-eat, wall collision, self collision).
+The fifth case — the paused tick — stays green under that specific
+mutation, and that is not a weak test: a paused tick never reaches
+`advance` at all, since `step` returns early for `status === 'paused'`
+before `advance` is ever called, so a mutation inside `advance` has
+nothing to hit. That case pins a different, still-real invariant (the
+early return in `step`), confirmed separately by removing that early
+return by hand, which does turn the paused case red. Recorded here so a
+later reader doesn't mistake a green case, under one particular mutation,
+for a hole in the coverage.
+
+One honest note on how this paragraph came to say what it now says: an
+earlier draft of this ADR claimed this invariant as "pinned" while the
+only verification of it had run in a throwaway script during review,
+never committed. That gap was caught by the documentation pass, not by
+review or by the test suite — the act of writing the claim down forced a
+check of whether it was actually true. It wasn't, yet; it is now.
 
 **The tick order is fixed, deliberately, including the edge case it
 creates.** Per tick: resolve the queued direction, compute the candidate
