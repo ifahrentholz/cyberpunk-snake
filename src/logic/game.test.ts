@@ -543,3 +543,94 @@ describe('step: eating food (AC4, AC5, AC6, AC7)', () => {
     expect(occurrences).toBe(2)
   })
 })
+
+describe('step: rng draw count pins "exactly one draw per eat, never otherwise"', () => {
+  // Wraps a deterministic rng so a test can assert how many times `advance`
+  // actually calls into it, without reaching past the public `createGame`/
+  // `step` seam or into the unexported `pickFoodPosition`. Each case below
+  // uses its own counting wrapper around its own tick's rng; `createGame`'s
+  // one draw for the initial food always happens on a *separate*, unwrapped
+  // rng (via `freshGame`), so it is never part of any count asserted here.
+  function countingRng(rng: Rng): { rng: Rng; count: () => number } {
+    let calls = 0
+    const wrapped: Rng = () => {
+      calls += 1
+      return rng()
+    }
+    return { rng: wrapped, count: () => calls }
+  }
+
+  it('draws exactly once on a tick that eats food', () => {
+    const config: GameConfig = { gridWidth: 28, gridHeight: 28 }
+    const state = freshGame(config, 9)
+    const head = headOf(state)
+    const foodAhead: GameState = { ...state, food: { x: head.x + 1, y: head.y } }
+    const counter = countingRng(createSeededRng(3))
+
+    const onFood = step(foodAhead, tick(counter.rng))
+
+    expect(onFood.score).toBe(1) // confirms the tick actually ate
+    expect(counter.count()).toBe(1)
+  })
+
+  it('draws zero times on a tick that does not eat', () => {
+    const config: GameConfig = { gridWidth: 28, gridHeight: 28 }
+    const state = freshGame(config, 9)
+    const head = headOf(state)
+    const foodElsewhere: GameState = {
+      ...state,
+      food: { x: head.x + 10, y: head.y + 10 },
+    }
+    const counter = countingRng(createSeededRng(3))
+
+    const moved = step(foodElsewhere, tick(counter.rng))
+
+    expect(moved.score).toBe(0) // confirms the tick did not eat
+    expect(counter.count()).toBe(0)
+  })
+
+  it('draws zero times on a tick that ends in wall collision', () => {
+    const tinyConfig: GameConfig = { gridWidth: 5, gridHeight: 5 }
+    let state = freshGame(tinyConfig, 3)
+    // Head starts at x=2 in a width-5 grid; three ticks reach the wall
+    // (same trajectory as the wall-collision test above).
+    state = step(state, tick())
+    state = step(state, tick())
+    const counter = countingRng(createSeededRng(3))
+
+    const result = step(state, tick(counter.rng))
+
+    expect(result.status).toBe('over') // confirms the tick collided
+    expect(counter.count()).toBe(0)
+  })
+
+  it('draws zero times on a tick that ends in self collision', () => {
+    const config: GameConfig = { gridWidth: 28, gridHeight: 28, initialSnakeLength: 5 }
+    let state = freshGame(config, 11)
+    // Same loop-into-own-body trajectory as the self-collision test above.
+    state = step(state, tick()) // tick: continue right
+    state = step(state, { type: 'direction', direction: 'down' })
+    state = step(state, tick()) // tick: turn down
+    state = step(state, { type: 'direction', direction: 'left' })
+    state = step(state, tick()) // tick: turn left
+    state = step(state, { type: 'direction', direction: 'up' })
+    const counter = countingRng(createSeededRng(3))
+
+    const result = step(state, tick(counter.rng)) // tick: attempt up -> loops into own body
+
+    expect(result.status).toBe('over') // confirms the tick collided
+    expect(counter.count()).toBe(0)
+  })
+
+  it('draws zero times on a tick dispatched while paused', () => {
+    const state = step(freshGame(), tick())
+    const paused = step(state, { type: 'pause' })
+    expect(paused.status).toBe('paused')
+    const counter = countingRng(createSeededRng(3))
+
+    const stillPaused = step(paused, tick(counter.rng))
+
+    expect(stillPaused.status).toBe('paused') // confirms the tick was a no-op
+    expect(counter.count()).toBe(0)
+  })
+})
