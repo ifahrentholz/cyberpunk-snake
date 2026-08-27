@@ -67,13 +67,18 @@ ADR-0008 in particular) for why.
   // @vitest-environment jsdom
   ```
 
-  Exactly three files do this today: `src/main.test.ts`,
+  Three files opt in today: `src/main.test.ts`,
   `src/input/keyboard.integration.test.ts`, and
   `src/renderer/canvas.integration.test.ts`.
-- Never write that pragma token into a comment for any other reason, not
-  even to say a file _doesn't_ use it — vitest scans the whole file
-  for the token regardless of surrounding text or negation, and a comment
-  that mentions it turns into the pragma itself.
+- Convention, not just caution: don't write that token into a comment for
+  any other reason. Vitest scans the whole file for `@vitest-environment`
+  followed by an environment name, and a negation in front of it does not
+  protect — that pattern is what turned a `(no @vitest-environment jsdom
+  pragma)` docblock in #7 into jsdom anyway. The one deliberate exception
+  is `tests/logic-environment.test.ts`, which mentions the token with no
+  name after it (so it doesn't match) and asserts `typeof window ===
+  'undefined'` to guard itself regardless — hence four files mention the
+  token, but only three actually opt in.
 - Test layout: unit tests live next to their code (`src/**/*.test.ts`);
   cross-cutting tests (e.g. the import-boundary suite) live under
   `tests/**`. Both globs are configured in `vitest.config.ts`. A test file
