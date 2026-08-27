@@ -50,6 +50,32 @@ function pressRestart(target: EventTarget): void {
   target.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', cancelable: true }));
 }
 
+/**
+ * A controllable stand-in for `requestAnimationFrame`/`cancelAnimationFrame`,
+ * injected via `composeApp`'s `frameSource` parameter (Stage 6 review of
+ * PR #17). Lets a test fire exactly one animation frame at a time instead
+ * of waiting on real wall-clock time — the same shape used in
+ * `src/composition/loop.test.ts`, duplicated locally rather than shared
+ * since it is a small, file-scoped test fake, not production surface.
+ */
+function makeFakeFrameSource() {
+  const callbacks: Array<(timestampMs: number) => void> = [];
+  return {
+    requestFrame: (cb: (timestampMs: number) => void): number => {
+      callbacks.push(cb);
+      return callbacks.length;
+    },
+    cancelFrame: (): void => {
+      // no-op fake; composeApp just needs a callable here.
+    },
+    fire: (timestampMs: number): void => {
+      const cb = callbacks.shift();
+      cb?.(timestampMs);
+    },
+    pending: (): number => callbacks.length,
+  };
+}
+
 let app: AppComposition | undefined;
 
 beforeEach(() => {
@@ -190,5 +216,50 @@ describe('composeApp', () => {
     pressDirection(document, 'ArrowUp');
 
     expect(app.getState()).toEqual(stateBeforeStop);
+  });
+
+  it('AC13 wired end to end: an unhandled render error surfaces via the visible error banner and demonstrably stops the loop', () => {
+    // Closes the gap Stage 6 review found: the exception guard was well
+    // tested at src/composition/loop.ts's level, but nothing exercised
+    // handleFatalTickError's actual DOM wiring in main.ts. Using the
+    // injected frameSource (item 2 of the same review) makes this
+    // deterministic — no real requestAnimationFrame timing involved.
+    const source = makeFakeFrameSource();
+    const fillRect = vi.fn(() => {
+      throw new Error('createRadialGradient: negative radius');
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      fillRect,
+      fillText: vi.fn(),
+      setTransform: vi.fn(),
+      fillStyle: '',
+      font: '',
+      textAlign: 'left',
+      textBaseline: 'alphabetic',
+    } as unknown as CanvasRenderingContext2D);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    app = composeApp(document, { requestFrame: source.requestFrame, cancelFrame: source.cancelFrame });
+
+    const banner = document.getElementById('error-banner');
+    expect(banner).not.toBeNull();
+    expect(banner?.hidden).toBe(true);
+
+    // The very first frame draws the start screen (drawBackground's
+    // fillRect throws immediately) — no tick has run yet. Without the
+    // onFrame guard this is exactly the case where the start screen
+    // would never appear at all (AC3), not merely freeze mid-game.
+    source.fire(0);
+
+    expect(banner?.hidden).toBe(false);
+    expect(banner?.textContent).toMatch(/went wrong/i);
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+    // The loop is demonstrably stopped: nothing is pending, and firing
+    // whatever might still be scheduled does not resurrect it.
+    expect(source.pending()).toBe(0);
+    const fillRectCallsBefore = fillRect.mock.calls.length;
+    source.fire(1000);
+    expect(fillRect.mock.calls.length).toBe(fillRectCallsBefore);
   });
 });

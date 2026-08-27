@@ -35,11 +35,34 @@ const TICK_MS = 1000 / TICK_RATE_HZ;
 export interface AppComposition {
   readonly canvas: HTMLCanvasElement;
   readonly getState: () => GameState;
-  readonly dispatch: (action: GameAction) => void;
-  /** Test seam: runs exactly what one tick-loop tick would run. */
+  /**
+   * Test seam: runs exactly what one tick-loop tick would run — including
+   * the `awaitingFirstMove` gate (AC3/AC4). Deliberately the only way to
+   * advance the game from outside; a raw `dispatch` was removed from this
+   * surface (Stage 6 review of PR #17) because it let a caller bypass
+   * that gate entirely (`dispatch({ type: 'tick', ... })` would move the
+   * snake before the first key press), it was unused by every test, and
+   * unused public surface that can violate an AC is pure risk with no
+   * offsetting value.
+   */
   readonly advanceTick: () => void;
   readonly stop: () => void;
   readonly highscore: number;
+}
+
+/**
+ * Optional injection point for the loop's frame source (Stage 6 review of
+ * PR #17): `startTickLoop` already accepts `requestFrame`/`cancelFrame`,
+ * but `composeApp` previously wired the window's real
+ * `requestAnimationFrame` unconditionally, one layer too late to test the
+ * loop deterministically through `composeApp` itself — a real rAF forces
+ * tests to wait on real wall-clock time. Both fields are optional and
+ * production behaviour is unchanged: the default remains the real
+ * `window.requestAnimationFrame`/`cancelAnimationFrame`.
+ */
+export interface FrameSource {
+  readonly requestFrame?: (callback: (timestampMs: number) => void) => number;
+  readonly cancelFrame?: (handle: number) => void;
 }
 
 function mountCanvas(doc: Document): HTMLCanvasElement {
@@ -73,11 +96,14 @@ function mountErrorBanner(doc: Document): HTMLElement {
 /**
  * Wires logic, input, renderer and persistence into a running app bound
  * to `doc`. Returns the handles a caller (production bootstrap, or a
- * test) needs: read the live state, dispatch actions directly, drive one
- * tick without waiting on `requestAnimationFrame`, and tear everything
- * down again.
+ * test) needs: read the live state, drive one tick without waiting on
+ * `requestAnimationFrame`, and tear everything down again.
+ *
+ * `frameSource` optionally overrides the tick loop's
+ * `requestFrame`/`cancelFrame` (see `FrameSource`); defaults to the real
+ * `window.requestAnimationFrame`/`cancelAnimationFrame` in production.
  */
-export function composeApp(doc: Document = document): AppComposition {
+export function composeApp(doc: Document = document, frameSource: FrameSource = {}): AppComposition {
   const canvas = mountCanvas(doc);
   const errorBanner = mountErrorBanner(doc);
   const ctx = canvas.getContext('2d');
@@ -138,19 +164,21 @@ export function composeApp(doc: Document = document): AppComposition {
     errorBanner.hidden = false;
   }
 
+  const requestFrame = frameSource.requestFrame ?? view.requestAnimationFrame.bind(view);
+  const cancelFrame = frameSource.cancelFrame ?? view.cancelAnimationFrame.bind(view);
+
   const stopLoop = startTickLoop({
     tickMs: TICK_MS,
     onTick: advanceTick,
     onFrame: () => render(ctx, state, cellSize),
     onError: handleFatalTickError,
-    requestFrame: view.requestAnimationFrame.bind(view),
-    cancelFrame: view.cancelAnimationFrame.bind(view),
+    requestFrame,
+    cancelFrame,
   });
 
   return {
     canvas,
     getState: () => state,
-    dispatch,
     advanceTick,
     stop: () => {
       stopLoop();

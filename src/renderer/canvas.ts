@@ -108,7 +108,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, cellSize
   drawBackground(ctx, width, height);
   drawFood(ctx, state.food, cellSize);
   drawSnake(ctx, state.snake, cellSize);
-  drawHud(ctx, state.score, width);
+  drawHud(ctx, state.score);
 
   if (state.status === 'ready') {
     drawOverlay(ctx, width, height, 'CYBERPUNK SNAKE', [
@@ -141,13 +141,12 @@ function drawSnake(ctx: CanvasRenderingContext2D, snake: GameState['snake'], cel
   }
 }
 
-function drawHud(ctx: CanvasRenderingContext2D, score: number, width: number): void {
+function drawHud(ctx: CanvasRenderingContext2D, score: number): void {
   ctx.fillStyle = COLORS.hud;
   ctx.font = '16px monospace';
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
   ctx.fillText(`Score: ${score}`, 8, 8);
-  void width;
 }
 
 function drawOverlay(
