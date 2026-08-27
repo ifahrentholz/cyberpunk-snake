@@ -1,11 +1,31 @@
 /**
  * Persistence layer unit tests (issue #7). No DOM needed: every test
  * injects an in-memory `HighscoreStorage` replacement instead of the
- * real `localStorage`, so this runs under the default `node` vitest
- * environment (no `@vitest-environment jsdom` pragma) — see #13.
+ * real `localStorage`, so this file carries none of Vitest's per-file
+ * environment opt-in comments and runs under the default `node`
+ * environment (see #13).
+ *
+ * Deliberately not spelling out that opt-in comment's exact syntax
+ * anywhere in this file, even to say "not present": Vitest's own pragma
+ * scanner matches across the *whole file*, not just a leading block
+ * comment, so a literal mention — negated or not — would flip this file
+ * onto jsdom despite this docblock saying the opposite (found in #7's
+ * Stage 5 review; confirmed empirically, not just by inspection). Under
+ * jsdom, `localStorage` genuinely exists, so a test that accidentally
+ * fell through to `recordHighscore`'s/`readHighscore`'s default storage
+ * instead of the injected fake below would pass silently here instead
+ * of throwing — exactly the failure class this suite exists to catch.
+ * The first test below pins the environment directly so that class of
+ * mistake cannot return unnoticed.
  */
 import { describe, expect, it } from 'vitest';
 import { readHighscore, recordHighscore, type HighscoreStorage } from './index';
+
+describe('this file runs without a DOM', () => {
+  it('has no `window` global (confirms the `node` vitest environment applies, not jsdom)', () => {
+    expect(typeof window).toBe('undefined');
+  });
+});
 
 /** A minimal in-memory stand-in for `localStorage`. */
 function makeMemoryStorage(initial: Record<string, string> = {}): HighscoreStorage & { readonly data: Record<string, string> } {
