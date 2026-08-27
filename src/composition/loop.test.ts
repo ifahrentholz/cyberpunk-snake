@@ -171,6 +171,103 @@ describe('startTickLoop', () => {
     expect(calls).toBe(1);
   });
 
+  it('OVERCORRECTION GUARD: still renders after a failed tick — the guard above must not skip onFrame on "stopped"', () => {
+    // The straightforward-looking fix for the onFrame guard below would
+    // be "skip rendering once stopped is true". That would silently
+    // destroy the deliberate behaviour asserted here: the last valid
+    // state must still be painted once after a tick fails, so the player
+    // sees *something* instead of nothing. This test exists specifically
+    // so that regression is caught, independent of the onTick guard test
+    // above (which also happens to assert it, less prominently).
+    const source = makeFakeFrameSource();
+    const onFrame = vi.fn();
+
+    startTickLoop({
+      tickMs: TICK_MS,
+      onTick: () => {
+        throw new Error('boom');
+      },
+      onFrame,
+      onError: () => {},
+      requestFrame: source.requestFrame,
+      cancelFrame: source.cancelFrame,
+    });
+
+    source.fire(0);
+    expect(onFrame).toHaveBeenCalledTimes(1);
+    source.fire(TICK_MS); // one tick due; onTick throws, loop stops
+    expect(onFrame).toHaveBeenCalledTimes(2); // still rendered once more
+  });
+
+  it('guards an exception thrown from onFrame (the renderer path): logs it and demonstrably terminates the loop instead of freezing silently', () => {
+    // onFrame runs every frame, onTick only on a tick due — this is the
+    // more frequently exercised of the two paths, and an unguarded throw
+    // here is the same silent freeze the onTick guard exists to prevent,
+    // just reached through the renderer instead of through `step`.
+    const source = makeFakeFrameSource();
+    const onError = vi.fn();
+    const onTick = vi.fn();
+    let frameCalls = 0;
+
+    startTickLoop({
+      tickMs: TICK_MS,
+      onTick,
+      onFrame: () => {
+        frameCalls += 1;
+        throw new Error('createRadialGradient: negative radius');
+      },
+      onError,
+      requestFrame: source.requestFrame,
+      cancelFrame: source.cancelFrame,
+    });
+
+    source.fire(0); // the very first frame — no tick has run at all yet
+
+    expect(frameCalls).toBe(1);
+    expect(onTick).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+    // No further frame is requested: the loop is demonstrably stopped
+    // rather than silently frozen with the start screen never having
+    // appeared (AC3) or spinning forever re-throwing.
+    expect(source.pending()).toBe(0);
+
+    // Firing whatever might still be pending (there is nothing) must not
+    // resurrect the loop.
+    source.fire(TICK_MS * 5);
+    expect(frameCalls).toBe(1);
+    expect(onTick).not.toHaveBeenCalled();
+  });
+
+  it('guards an exception thrown from onFrame on a later frame, not just the first', () => {
+    const source = makeFakeFrameSource();
+    const onError = vi.fn();
+    let frameCalls = 0;
+
+    startTickLoop({
+      tickMs: TICK_MS,
+      onTick: () => {},
+      onFrame: () => {
+        frameCalls += 1;
+        if (frameCalls === 2) {
+          throw new Error('boom on the second frame');
+        }
+      },
+      onError,
+      requestFrame: source.requestFrame,
+      cancelFrame: source.cancelFrame,
+    });
+
+    source.fire(0);
+    expect(onError).not.toHaveBeenCalled();
+    expect(source.pending()).toBe(1);
+
+    source.fire(TICK_MS);
+    expect(frameCalls).toBe(2);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(source.pending()).toBe(0);
+  });
+
   it('logs to console.error by default when no onError is supplied', () => {
     const source = makeFakeFrameSource();
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

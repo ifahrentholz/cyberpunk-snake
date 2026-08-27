@@ -118,7 +118,25 @@ export function startTickLoop(options: TickLoopOptions): () => void {
     // Render the frame even if a tick just failed, so the last valid
     // state (or whatever the caller's error handling produced) is still
     // drawn instead of leaving stale pixels on screen with no feedback.
-    options.onFrame(timestampMs);
+    // KEEP THIS UNCONDITIONAL: `onFrame` is deliberately still called here
+    // even when a tick above just set `stopped = true` (do not skip it on
+    // `stopped`) — that is what paints the last good state instead of
+    // leaving stale pixels with no feedback at all.
+    //
+    // The call itself, however, is guarded exactly like `onTick` above:
+    // an unguarded `onFrame` is the same silent freeze this file's own
+    // AC guards against, just reached through the renderer instead of
+    // through `step`. It is the *more* dangerous of the two paths —
+    // `onFrame` runs every frame, `onTick` only on a tick — and if the
+    // very first frame throws before any tick has ever run, there is no
+    // previously-drawn frame to freeze on at all: the start screen would
+    // simply never appear (AC3), not just stop updating (AC13).
+    try {
+      options.onFrame(timestampMs);
+    } catch (error) {
+      stopped = true;
+      onError(error);
+    }
 
     if (!stopped) {
       handle = requestFrame(frame);
