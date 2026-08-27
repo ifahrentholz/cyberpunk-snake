@@ -219,6 +219,23 @@ function resetShadow(ctx: CanvasRenderingContext2D): void {
 }
 
 /**
+ * `render`'s parameters (issue #7): grouped into one options object
+ * rather than a growing list of positional arguments. `cellSize`,
+ * `timestampMs` and `highscore` are all plain `number`s — a fifth bare
+ * `number` parameter next to the existing two would be a silent
+ * transposition hazard (any two of the three could be swapped and it
+ * would still type-check). Naming them as object keys removes that
+ * hazard at every call site instead of relying on call-site discipline.
+ */
+export interface RenderOptions {
+  readonly state: GameState;
+  readonly cellSize: number;
+  readonly timestampMs: number;
+  /** Issue #7: the persisted highscore, drawn in the HUD and on the game-over screen. Read-only here — this module never touches persistence. */
+  readonly highscore: number;
+}
+
+/**
  * Draws the current `GameState` into `ctx` at the given cell size (in CSS
  * pixels — the caller is expected to have already applied the DPR
  * transform via `resizeCanvas`). The sole entry point the composition
@@ -229,7 +246,7 @@ function resetShadow(ctx: CanvasRenderingContext2D): void {
  * module accepts, used solely to drive the food's decorative pulse. It
  * never affects `GameState`.
  */
-export function render(ctx: CanvasRenderingContext2D, state: GameState, cellSize: number, timestampMs: number): void {
+export function render(ctx: CanvasRenderingContext2D, { state, cellSize, timestampMs, highscore }: RenderOptions): void {
   const width = state.config.gridWidth * cellSize;
   const height = state.config.gridHeight * cellSize;
 
@@ -242,7 +259,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, cellSize
   drawGrid(ctx, state.config.gridWidth, state.config.gridHeight, cellSize);
   drawFood(ctx, state.food, cellSize, timestampMs);
   drawSnake(ctx, state.snake, cellSize);
-  drawHud(ctx, state.score);
+  drawHud(ctx, state.score, highscore);
 
   if (state.status === 'ready') {
     drawOverlay(ctx, width, height, 'CYBERPUNK SNAKE', [
@@ -254,7 +271,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, cellSize
   } else if (state.status === 'paused') {
     drawOverlay(ctx, width, height, 'PAUSED', ['Space to resume']);
   } else if (state.status === 'over') {
-    drawOverlay(ctx, width, height, 'GAME OVER', [`Score: ${state.score}`, 'R to restart']);
+    drawOverlay(ctx, width, height, 'GAME OVER', [`Score: ${state.score}`, `Highscore: ${highscore}`, 'R to restart']);
   }
 
   // Drawn last so the CRT-style scanline film sits over the whole frame,
@@ -346,7 +363,10 @@ function drawSnake(ctx: CanvasRenderingContext2D, snake: GameState['snake'], cel
   resetShadow(ctx);
 }
 
-function drawHud(ctx: CanvasRenderingContext2D, score: number): void {
+/** Line height, in px, between the HUD's stacked "Score" / "Highscore" lines. */
+const HUD_LINE_HEIGHT = 20;
+
+function drawHud(ctx: CanvasRenderingContext2D, score: number, highscore: number): void {
   // Defensive reset: the HUD is plain text and must never inherit glow
   // from whatever drew immediately before it.
   resetShadow(ctx);
@@ -355,6 +375,9 @@ function drawHud(ctx: CanvasRenderingContext2D, score: number): void {
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
   ctx.fillText(`Score: ${score}`, 8, 8);
+  // Issue #7: highscore is shown alongside the score at all times, not
+  // only on the game-over screen.
+  ctx.fillText(`Highscore: ${highscore}`, 8, 8 + HUD_LINE_HEIGHT);
 }
 
 /** AC "a subtle scanline overlay is visible over the playfield". Static — no timestamp needed. */
