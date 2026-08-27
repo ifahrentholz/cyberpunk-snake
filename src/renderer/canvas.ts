@@ -35,10 +35,19 @@
  *   without a DOM in `canvas.test.ts`.
  *
  * AC (issue #16): no test may assert on canvas output, pixel data or
- * draw-call snapshots — this module's drawing is verified by eyeballing
- * `npm run dev`, not by unit test. What IS unit-tested without a DOM is
- * the pure math: `computeCanvasMetrics` (sizing/DPR) and
- * `computeFoodPulseFactor`/`computeFoodPulseMetrics` (the food pulse).
+ * draw-call snapshots. Two kinds of test exist instead (Stage 6 review
+ * of #16 closed a real gap here: before it, `render` was invoked exactly
+ * once across the whole suite, and that one call threw immediately in
+ * `drawBackground`, so nothing below it ever ran):
+ * - Pure math, no DOM: `computeCanvasMetrics` (sizing/DPR) and
+ *   `computeFoodPulseFactor`/`computeFoodPulseMetrics` (the food pulse),
+ *   in `canvas.test.ts`.
+ * - A smoke test for `render` itself, in `canvas.render.test.ts`: calls
+ *   it for every reachable `GameState.status` and a spread of
+ *   timestamps, asserting only that it does not throw — nothing about
+ *   what was drawn.
+ * What this file's drawing actually looks like is still verified by
+ * eyeballing `npm run dev`, not by either kind of test.
  */
 import type { GameState } from '../logic/game';
 
@@ -79,8 +88,15 @@ const SCANLINE_THICKNESS = 1;
 
 /** Full pulse-cycle length for the food's pulsing animation, in ms. */
 const FOOD_PULSE_PERIOD_MS = 1400;
-/** How far (as a fraction of cell size) the food may shrink at the pulse's smallest point. */
-const FOOD_PULSE_MAX_INSET_RATIO = 0.22;
+/**
+ * How far (as a fraction of cell size) the food may shrink at the
+ * pulse's smallest point. Exported (Stage 6 review of #16) because a
+ * test pins the real precondition `computeFoodPulseMetrics`'s clamps
+ * rely on: this must stay below 0.5, or an unclamped inset would reach
+ * (and past 0.5, exceed) `cellSize` and draw a negative-sized food. See
+ * `canvas.test.ts`'s `FOOD_PULSE_MAX_INSET_RATIO` describe block.
+ */
+export const FOOD_PULSE_MAX_INSET_RATIO = 0.22;
 
 /** Result of the pure canvas-sizing calculation. All sizes in pixels. */
 export interface CanvasMetrics {
@@ -289,14 +305,28 @@ function drawFood(ctx: CanvasRenderingContext2D, food: GameState['food'], cellSi
  * `src/logic/game.ts`'s `advance`).
  */
 function drawSnake(ctx: CanvasRenderingContext2D, snake: GameState['snake'], cellSize: number): void {
-  snake.forEach((segment, index) => {
-    const isHead = index === 0;
-    const color = isHead ? COLORS.snakeHead : COLORS.snakeBody;
-    ctx.fillStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = isHead ? GLOW.snakeHead : GLOW.snakeBody;
-    ctx.fillRect(segment.x * cellSize, segment.y * cellSize, cellSize, cellSize);
-  });
+  // Shadow state is set once per colour, not once per segment (Stage 6
+  // review of #16): every body segment shares the same colour/glow, so
+  // re-setting shadowBlur/shadowColor on each of them was redundant
+  // context churn for an identical value, not a correctness need. The
+  // only real transition is head -> body.
+  const [head, ...body] = snake;
+
+  if (head) {
+    ctx.fillStyle = COLORS.snakeHead;
+    ctx.shadowColor = COLORS.snakeHead;
+    ctx.shadowBlur = GLOW.snakeHead;
+    ctx.fillRect(head.x * cellSize, head.y * cellSize, cellSize, cellSize);
+  }
+
+  if (body.length > 0) {
+    ctx.fillStyle = COLORS.snakeBody;
+    ctx.shadowColor = COLORS.snakeBody;
+    ctx.shadowBlur = GLOW.snakeBody;
+    for (const segment of body) {
+      ctx.fillRect(segment.x * cellSize, segment.y * cellSize, cellSize, cellSize);
+    }
+  }
 
   resetShadow(ctx);
 }

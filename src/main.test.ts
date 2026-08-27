@@ -15,26 +15,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { composeApp, type AppComposition } from './main';
-
-/**
- * jsdom does not implement `HTMLCanvasElement#getContext` without the
- * native `canvas` npm package (not a dependency here — this is a DOM
- * capability gap, not something to draw-test around). Stubbing it lets
- * `composeApp`'s wiring run under jsdom; it is not an assertion about
- * drawing (AC16 forbids those), just a fake so `render()`'s calls have
- * somewhere harmless to land.
- */
-function createFakeCanvasContext(): CanvasRenderingContext2D {
-  return {
-    fillRect: vi.fn(),
-    fillText: vi.fn(),
-    setTransform: vi.fn(),
-    fillStyle: '',
-    font: '',
-    textAlign: 'left',
-    textBaseline: 'alphabetic',
-  } as unknown as CanvasRenderingContext2D;
-}
+import { createFakeCanvasContext } from './test-support/fakeCanvasContext';
 
 function pressDirection(target: EventTarget, key: string): void {
   target.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true }));
