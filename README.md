@@ -1,5 +1,87 @@
 # cyberpunk-snake
 
-Ein HTML5 Snake-Spiel im Neon-Noir-Cyberpunk-Stil. Vanilla TypeScript, Vite, Canvas 2D.
+A neon-noir Snake game for the browser. Vanilla TypeScript, Vite, Canvas 2D
+— no runtime dependencies.
 
-Status: Bootstrap. Implementierung folgt ticketweise.
+## Play
+
+```
+npm install
+npm run dev
+```
+
+Open the URL Vite prints. Press an arrow key or `WASD` to start.
+
+Play it live: _will be added with #9 (GitHub Pages deployment)._
+
+### Controls
+
+| Key                   | Action                   |
+| ---------------------- | ------------------------- |
+| Arrow keys or `WASD`   | Move                      |
+| `Space`                | Pause / resume (toggle)  |
+| `R`                    | Restart                  |
+
+The snake doesn't move on its own — the game starts on your first
+direction key press. Keys held with `Ctrl`/`Cmd`/`Alt` are ignored, so
+browser shortcuts (e.g. Cmd+R) keep working; `Shift` is not affected.
+
+## Develop
+
+```
+npm test        # vitest run
+npm run typecheck  # tsc --noEmit
+npm run lint     # eslint .
+npm run build    # vite build
+```
+
+183 tests across 11 files, all green, no runtime `dependencies` in
+`package.json`.
+
+### Project structure
+
+```
+src/logic/         pure game rules — no DOM, no randomness, no clock
+src/input/         keyboard events -> game actions
+src/renderer/       game state -> canvas (read-only)
+src/persistence/    highscore <-> localStorage (storage is injected)
+src/composition/    the tick loop (fixed-rate, time-accumulating)
+src/main.ts         the composition boundary — clock, randomness and the
+                     DOM are only ever wired in here
+src/test-support/   a fake canvas context shared by renderer tests
+```
+
+`src/logic` is a one-way boundary: it may not import anything else under
+`src/`, and it may not touch the DOM, `Math.random`, or the clock — both
+mechanically enforced by `eslint.config.js`. Randomness, time and storage
+are passed into it as parameters instead. See `docs/adr/` (ADR-0001 and
+ADR-0008 in particular) for why.
+
+### Tests
+
+- Default test environment is `node`. A test that genuinely needs a DOM
+  opts in with a docblock pragma as the very first line of the file — not
+  merely near the top:
+
+  ```
+  // @vitest-environment jsdom
+  ```
+
+  Exactly three files do this today: `src/main.test.ts`,
+  `src/input/keyboard.integration.test.ts`, and
+  `src/renderer/canvas.integration.test.ts`.
+- Never write that pragma token into a comment for any other reason, not
+  even to say a file _doesn't_ use it — vitest scans the whole file
+  for the token regardless of surrounding text or negation, and a comment
+  that mentions it turns into the pragma itself.
+- Test layout: unit tests live next to their code (`src/**/*.test.ts`);
+  cross-cutting tests (e.g. the import-boundary suite) live under
+  `tests/**`. Both globs are configured in `vitest.config.ts`. A test file
+  outside both globs simply doesn't run — no error, no warning, exit 0.
+  See ADR-0005.
+
+### Architecture decisions
+
+Design rationale lives in `docs/adr/` (ADR-0001 through ADR-0008), and
+per-ticket changes in `docs/release-notes/CHANGELOG.md`. This README
+covers what exists and how to use it; the ADRs cover why.
