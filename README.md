@@ -44,25 +44,28 @@ npm run build    # vite build
 ```
 src/logic/         pure game rules — no DOM, no randomness, no clock
 src/input/         keyboard events -> game actions
-src/renderer/       game state -> canvas (read-only)
+src/renderer/       game state -> canvas (read-only w.r.t. GameState)
 src/persistence/    highscore <-> localStorage (storage is injected)
 src/composition/    the tick loop (fixed-rate, time-accumulating)
 src/main.ts         the composition boundary — selects and injects the
                      clock, randomness and the concrete browser Window;
-                     time and randomness enter the program only here
-src/test-support/   a fake canvas context shared by renderer tests
+                     time and randomness enter the program only here in
+                     practice
+src/test-support/   a fake canvas context shared by renderer and
+                     composition tests
 ```
 
 The DOM itself isn't confined to `main.ts`, though: `renderer` owns the
-canvas (sizing, drawing context) and `persistence`'s default storage
-implementation owns `localStorage` — each layer holds a narrow, named
-slice of the platform rather than routing every access through the
-composition boundary. `src/logic` is the one layer where purity is
-mechanically enforced, not just conventional: it may not import anything
-else under `src/`, nor touch the DOM, `Math.random`, or the clock, all
-via the `eslint.config.js` allow-list. Randomness, time and storage are
-passed into it as parameters instead. See `docs/adr/` (ADR-0001 and
-ADR-0008 in particular) for why.
+canvas (sizing, drawing context), `persistence`'s default storage
+implementation owns `localStorage`, and `input` owns the `EventTarget`
+it binds to — each layer holds a narrow, named slice of the platform
+rather than routing every access through the composition boundary.
+`src/logic` is the one layer where purity is mechanically enforced, not
+just conventional: it may not import anything else under `src/`, nor
+touch the DOM, `Math.random`, or the clock, all via the
+`eslint.config.js` allow-list. Randomness, time and storage are passed
+into it as parameters instead. See `docs/adr/` (ADR-0001 and ADR-0008
+in particular) for why.
 
 ### Tests
 
