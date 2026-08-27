@@ -310,7 +310,18 @@ function drawSnake(ctx: CanvasRenderingContext2D, snake: GameState['snake'], cel
   // re-setting shadowBlur/shadowColor on each of them was redundant
   // context churn for an identical value, not a correctness need. The
   // only real transition is head -> body.
-  const [head, ...body] = snake;
+  //
+  // Index-based, not `const [head, ...body] = snake` (Stage 6 review,
+  // round 3): the rest-spread copied the tail into a new array every
+  // frame. The cost is noise, not a real problem (sub-microsecond,
+  // dwarfed by the shadowBlur cost this fix targets) -- changed anyway
+  // so a perf-motivated fix doesn't itself introduce a hot-path
+  // allocation. Draw order and the colour/glow used per segment are
+  // unchanged: head (index 0) first, then the rest in original order --
+  // verified by running both versions against the same fake ctx and
+  // diffing the recorded fillRect call sequence (see the PR comment for
+  // exactly how).
+  const head = snake[0];
 
   if (head) {
     ctx.fillStyle = COLORS.snakeHead;
@@ -319,11 +330,15 @@ function drawSnake(ctx: CanvasRenderingContext2D, snake: GameState['snake'], cel
     ctx.fillRect(head.x * cellSize, head.y * cellSize, cellSize, cellSize);
   }
 
-  if (body.length > 0) {
+  if (snake.length > 1) {
     ctx.fillStyle = COLORS.snakeBody;
     ctx.shadowColor = COLORS.snakeBody;
     ctx.shadowBlur = GLOW.snakeBody;
-    for (const segment of body) {
+    for (let i = 1; i < snake.length; i += 1) {
+      const segment = snake[i];
+      if (!segment) {
+        continue;
+      }
       ctx.fillRect(segment.x * cellSize, segment.y * cellSize, cellSize, cellSize);
     }
   }

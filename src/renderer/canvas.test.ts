@@ -65,11 +65,24 @@ describe('computeCanvasMetrics', () => {
  * below — stays under the 0.5 threshold past which an unclamped inset
  * would reach (and then exceed) `cellSize`.
  *
- * Two of the ten are the exception, called out individually below: the
- * non-finite-input case (a real `Number.isFinite` fallback branch —
- * `Math.max`/`Math.min` pass a `NaN` straight through, so it does NOT
- * come from the clamps) and the zero/negative-`cellSize` case (a real
- * `cellSize > 0` fallback branch).
+ * One of the ten is a genuine exception, called out individually below:
+ * the non-finite-timestamp case (`computeFoodPulseFactor`'s
+ * `Number.isFinite` fallback branch — `Math.max`/`Math.min` pass a
+ * `NaN` straight through, so removing that fallback alone, clamps left
+ * in place, does turn that one test red; mutation-confirmed).
+ *
+ * CORRECTION, round 3 of the same review: the zero/negative-`cellSize`
+ * test was previously claimed as a second exception too ("exercises the
+ * `cellSize > 0` fallback branch"). Mutation-confirmed wrong: removing
+ * only that half of `computeFoodPulseMetrics`'s `safeCellSize` ternary,
+ * with the four clamps still in place, changes no return value and all
+ * 16 tests stay green — the clamps already force size/offset to 0 for a
+ * non-positive `cellSize` on their own, making that half of the guard
+ * behaviour-neutral under them today. See the corrected comment on that
+ * test itself for the full account. It is still a real, held property
+ * (a non-positive `cellSize` does yield a zero size/offset) — it is
+ * just held BY the clamps, the same as the other nine, not by that
+ * fallback independently.
  *
  * The `Math.max`/`Math.min` clamps themselves stay in the source as
  * documented forward defense (see the comment on `computeFoodPulseMetrics`
@@ -118,7 +131,7 @@ describe('computeFoodPulseFactor', () => {
     expect(factor).toBeLessThanOrEqual(1);
   });
 
-  it('stays within [0, 1] for non-finite input (NaN, Infinity) — this DOES exercise a real branch: the Number.isFinite fallback to 0, since Math.max/min would otherwise pass a NaN straight through', () => {
+  it('stays within [0, 1] for non-finite input (NaN, Infinity) — this DOES exercise a real branch (mutation-confirmed, unlike the cellSize > 0 claim corrected below): the Number.isFinite fallback to 0, since Math.max/min would otherwise pass a NaN straight through', () => {
     expect(computeFoodPulseFactor(Number.NaN)).toBeGreaterThanOrEqual(0);
     expect(computeFoodPulseFactor(Number.POSITIVE_INFINITY)).toBeGreaterThanOrEqual(0);
     expect(computeFoodPulseFactor(Number.NEGATIVE_INFINITY)).toBeGreaterThanOrEqual(0);
@@ -146,7 +159,25 @@ describe('computeFoodPulseMetrics', () => {
     expect(metrics.glowBlur).toBeGreaterThanOrEqual(0);
   });
 
-  it('collapses size/offset to zero for a zero or negative cell size — this DOES exercise a real branch: the cellSize > 0 fallback, not the four clamps under review above', () => {
+  it('collapses size/offset to zero for a zero or negative cell size — held by the four Math.max(0, ...) clamps, not by the cellSize > 0 half of the fallback (correction below)', () => {
+    // CORRECTION (Stage 6 review, round 3): the previous comment here
+    // claimed this test "DOES exercise a real branch: the cellSize > 0
+    // fallback" — mutation-confirmed wrong. Removing only the
+    // `&& cellSize > 0` half of computeFoodPulseMetrics's
+    // `safeCellSize` ternary (leaving `Number.isFinite(cellSize)` and
+    // all four Math.max(0, ...) clamps in place) changes NO return
+    // value for either input below: 16/16 tests still pass. Reason,
+    // worked through both inputs: for cellSize = -20, dropping the
+    // `> 0` check makes safeCellSize = -20 instead of 0, so maxInset
+    // becomes negative; `inset = Math.max(0, factor * maxInset)` then
+    // clamps straight back to 0 regardless (factor is never negative),
+    // and from there size/offset compute identically either way. The
+    // property this test checks — a non-positive cellSize yields a
+    // zero size/offset — is real and does hold; it is just held BY the
+    // four clamps, not independently by this half of the guard. (The
+    // `Number.isFinite(cellSize)` half is a separate matter, not
+    // exercised either way by these two already-finite inputs, and not
+    // something this test claims anything about.)
     const zero = computeFoodPulseMetrics(500, 0);
     expect(zero.size).toBeGreaterThanOrEqual(0);
     expect(zero.offset).toBeGreaterThanOrEqual(0);
