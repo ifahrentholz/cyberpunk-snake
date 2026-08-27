@@ -126,3 +126,23 @@ contributing to the project — not the reasoning itself.
   green when the rule it names is deleted), the new render-smoke-test
   category this ticket introduces, and the still-unverified cross-browser
   behaviour this ticket inherits and sharpens from #6.
+
+- Highscore persistence (#7): your highscore now survives closing the tab.
+  It's shown in the HUD alongside the current score and on the game-over
+  screen, and it only goes up when a finished game genuinely beats the
+  previous one — a tied score doesn't count as a new highscore. Backed by
+  `localStorage`; if that's blocked (e.g. Safari private browsing, a
+  browser extension), the game still plays normally, it just won't
+  remember the highscore for next time. Play it the same way as before:
+  `npm run dev`. **Still not published anywhere** — GitHub Pages hosting
+  is issue #9. 183 tests now pass across 11 files (verified with a real
+  `npm test` run on this branch; up from 162 across 10 files before this
+  ticket). See `docs/adr/0008-highscore-persistence.md` for the reasoning
+  behind treating storage as an injected dependency (the third instance
+  of that pattern in this project, after `rng` and `FrameSource`), why
+  `AppComposition.highscore` became a live `getHighscore()` read instead
+  of a static field, `render()`'s move to an options object, and a
+  test-strength finding from the Stage 6 follow-up: the first draft of
+  the composition-level AC6 test proved nothing, because an unmocked
+  `Math.random` let it short-circuit past the code path it was meant to
+  exercise.
