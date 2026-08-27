@@ -21,7 +21,7 @@
 import { createGame, step, type GameAction, type GameState } from './logic/game';
 import { bindKeyboard } from './input/keyboard';
 import { render, resizeCanvas } from './renderer';
-import { readHighscorePlaceholder } from './persistence';
+import { readHighscore, recordHighscore, browserLocalStorage, type HighscoreStorage } from './persistence';
 import { startTickLoop } from './composition/loop';
 
 /** AC5: a 28×28 grid. */
@@ -47,7 +47,14 @@ export interface AppComposition {
    */
   readonly advanceTick: () => void;
   readonly stop: () => void;
-  readonly highscore: number;
+  /**
+   * Issue #7: a live read, analogous to `getState` — not a value
+   * captured once at composition time. The highscore updates after a
+   * game ends with a genuine improvement (see `dispatch` below), so a
+   * static field read at `composeApp` time would go stale the moment
+   * that first happens.
+   */
+  readonly getHighscore: () => number;
 }
 
 /**
@@ -103,7 +110,11 @@ function mountErrorBanner(doc: Document): HTMLElement {
  * `requestFrame`/`cancelFrame` (see `FrameSource`); defaults to the real
  * `window.requestAnimationFrame`/`cancelAnimationFrame` in production.
  */
-export function composeApp(doc: Document = document, frameSource: FrameSource = {}): AppComposition {
+export function composeApp(
+  doc: Document = document,
+  frameSource: FrameSource = {},
+  storage: HighscoreStorage = browserLocalStorage,
+): AppComposition {
   const canvas = mountCanvas(doc);
   const errorBanner = mountErrorBanner(doc);
   const ctx = canvas.getContext('2d');
@@ -114,6 +125,9 @@ export function composeApp(doc: Document = document, frameSource: FrameSource = 
 
   let state: GameState = createGame({ gridWidth: GRID_WIDTH, gridHeight: GRID_HEIGHT }, Math.random);
   let cellSize = resizeCanvas(canvas, GRID_WIDTH, GRID_HEIGHT, view);
+  // Issue #7: read once at startup; updated below only when a
+  // just-finished game genuinely beats it (see `dispatch`).
+  let highscore = readHighscore(storage);
 
   // AC3/AC4: the start screen must show before any movement begins, and
   // the first direction key press must be the first move. `step` itself
@@ -126,11 +140,19 @@ export function composeApp(doc: Document = document, frameSource: FrameSource = 
 
   function dispatch(action: GameAction): void {
     const wasReady = state.status === 'ready';
+    // Issue #7: captured before `step` runs so the check below fires
+    // exactly once per game end, not on every subsequent tick/keypress
+    // while `status` stays 'over' (it is sticky until 'restart' — see
+    // `step` in src/logic/game.ts).
+    const wasOver = state.status === 'over';
     state = step(state, action);
     if (action.type === 'restart') {
       awaitingFirstMove = true;
     } else if (wasReady && action.type === 'direction') {
       awaitingFirstMove = false;
+    }
+    if (!wasOver && state.status === 'over') {
+      highscore = recordHighscore(state.score, storage);
     }
   }
 
@@ -170,7 +192,7 @@ export function composeApp(doc: Document = document, frameSource: FrameSource = 
   const stopLoop = startTickLoop({
     tickMs: TICK_MS,
     onTick: advanceTick,
-    onFrame: (timestampMs: number) => render(ctx, state, cellSize, timestampMs),
+    onFrame: (timestampMs: number) => render(ctx, { state, cellSize, timestampMs, highscore }),
     onError: handleFatalTickError,
     requestFrame,
     cancelFrame,
@@ -185,7 +207,7 @@ export function composeApp(doc: Document = document, frameSource: FrameSource = 
       unbindKeyboard();
       view.removeEventListener('resize', handleResize);
     },
-    highscore: readHighscorePlaceholder(),
+    getHighscore: () => highscore,
   };
 }
 

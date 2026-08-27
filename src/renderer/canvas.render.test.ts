@@ -112,7 +112,7 @@ describe('render (smoke test)', () => {
     for (const timestampMs of timestamps) {
       it(`does not throw for ${label} at timestamp ${timestampMs} (cellSize ${cellSize})`, () => {
         const ctx = createFakeCanvasContext();
-        expect(() => render(ctx, state, cellSize, timestampMs)).not.toThrow();
+        expect(() => render(ctx, { state, cellSize, timestampMs, highscore: 0 })).not.toThrow();
       });
     }
   }

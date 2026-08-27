@@ -16,6 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { composeApp, type AppComposition } from './main';
 import { createFakeCanvasContext } from './test-support/fakeCanvasContext';
+import { readHighscore, recordHighscore, type HighscoreStorage } from './persistence';
 
 function pressDirection(target: EventTarget, key: string): void {
   target.dispatchEvent(new KeyboardEvent('keydown', { key, cancelable: true }));
@@ -54,6 +55,22 @@ function makeFakeFrameSource() {
       cb?.(timestampMs);
     },
     pending: (): number => callbacks.length,
+  };
+}
+
+/**
+ * A minimal in-memory `HighscoreStorage` stand-in (issue #7), injected via
+ * `composeApp`'s `storage` parameter the same way `makeFakeFrameSource`
+ * above is injected via `frameSource` — a small, file-scoped test fake
+ * rather than shared production surface.
+ */
+function makeMemoryStorage(): HighscoreStorage {
+  const data: Record<string, string> = {};
+  return {
+    getItem: (key: string) => (Object.prototype.hasOwnProperty.call(data, key) ? data[key]! : null),
+    setItem: (key: string, value: string) => {
+      data[key] = value;
+    },
   };
 }
 
@@ -242,5 +259,53 @@ describe('composeApp', () => {
     const fillRectCallsBefore = fillRect.mock.calls.length;
     source.fire(1000);
     expect(fillRect.mock.calls.length).toBe(fillRectCallsBefore);
+  });
+
+  it('issue #7: persists a new highscore when a finished game genuinely beats the stored value', () => {
+    // R chosen so the very first tick's food sits directly one cell ahead
+    // of the snake's head (a raster-scan artefact of pickFoodPosition's
+    // fixed rng, verified by direct simulation) — the snake eats it,
+    // scores 1, then runs on to a wall collision without eating again.
+    // See PR description for how R was derived.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5179);
+    const storage = makeMemoryStorage();
+    expect(readHighscore(storage)).toBe(0);
+
+    app = composeApp(document, {}, storage);
+    expect(app.getHighscore()).toBe(0);
+
+    pressDirection(document, 'ArrowRight');
+    for (let i = 0; i < 20 && app.getState().status !== 'over'; i += 1) {
+      app.advanceTick();
+    }
+
+    expect(app.getState().status).toBe('over');
+    expect(app.getState().score).toBe(1);
+    expect(app.getHighscore()).toBe(1);
+    expect(readHighscore(storage)).toBe(1);
+  });
+
+  it("issue #7: leaves the stored highscore untouched when a finished game's score does not beat it", () => {
+    const storage = makeMemoryStorage();
+    // Pre-seed a highscore no in-grid score from this test could beat.
+    recordHighscore(5, storage);
+
+    // R = 0 keeps every food placement pinned to (0, 0) — far off the
+    // snake's straight-line path to the right wall — so nothing is ever
+    // eaten and the game ends at score 0.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    app = composeApp(document, {}, storage);
+    expect(app.getHighscore()).toBe(5);
+
+    pressDirection(document, 'ArrowRight');
+    for (let i = 0; i < 20 && app.getState().status !== 'over'; i += 1) {
+      app.advanceTick();
+    }
+
+    expect(app.getState().status).toBe('over');
+    expect(app.getState().score).toBe(0);
+    expect(app.getHighscore()).toBe(5);
+    expect(readHighscore(storage)).toBe(5);
   });
 });
