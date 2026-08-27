@@ -106,3 +106,23 @@ contributing to the project — not the reasoning itself.
   important to know before relying on this — the fact that nobody has
   yet run this game in a real browser; cross-browser behaviour is
   unverified.
+- Cyberpunk visual treatment (#16): the game now looks the way the
+  approved spec (issue #1, approved 2026-08-25) intends, layered over the
+  playable slice from #6 with no change to game rules, controls or flow
+  — this is presentation only. Near-black background, a neon-cyan snake
+  with a visually distinct, brighter head, magenta pulsing food, a dimmed
+  background grid, neon glow (`shadowBlur`/`shadowColor`, no shaders, no
+  extra canvas layers) and a static scanline overlay. Play it the same
+  way as before: `npm run dev`. **Still not published anywhere** —
+  GitHub Pages hosting is issue #9. **Still no highscore** — that's
+  issue #7; `highscore` remains a placeholder. 162 tests now pass across
+  10 files (verified with a real `npm test` run on this branch; up from
+  133 across 9 files before this ticket). See
+  `docs/adr/0007-cyberpunk-visual-treatment.md` for the reasoning behind
+  the shadow-state reset discipline this ticket had to introduce, why
+  `save()`/`restore()` was deliberately not used instead, the pinned
+  `FOOD_PULSE_MAX_INSET_RATIO` invariant and the test-strength lesson
+  behind it (the project's fifth and sixth instances of a test that stays
+  green when the rule it names is deleted), the new render-smoke-test
+  category this ticket introduces, and the still-unverified cross-browser
+  behaviour this ticket inherits and sharpens from #6.
