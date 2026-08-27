@@ -170,7 +170,7 @@ export function composeApp(doc: Document = document, frameSource: FrameSource = 
   const stopLoop = startTickLoop({
     tickMs: TICK_MS,
     onTick: advanceTick,
-    onFrame: () => render(ctx, state, cellSize),
+    onFrame: (timestampMs: number) => render(ctx, state, cellSize, timestampMs),
     onError: handleFatalTickError,
     requestFrame,
     cancelFrame,
