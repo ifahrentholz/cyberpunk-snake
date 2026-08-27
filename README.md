@@ -10,7 +10,8 @@ npm install
 npm run dev
 ```
 
-Open the URL Vite prints. Press an arrow key or `WASD` to start.
+Developed and tested on Node 24. Open the URL Vite prints. Press an
+arrow key or `WASD` to start.
 
 Play it live: _will be added with #9 (GitHub Pages deployment)._
 
@@ -46,15 +47,21 @@ src/input/         keyboard events -> game actions
 src/renderer/       game state -> canvas (read-only)
 src/persistence/    highscore <-> localStorage (storage is injected)
 src/composition/    the tick loop (fixed-rate, time-accumulating)
-src/main.ts         the composition boundary — clock, randomness and the
-                     DOM are only ever wired in here
+src/main.ts         the composition boundary — selects and injects the
+                     clock, randomness and the concrete browser Window;
+                     time and randomness enter the program only here
 src/test-support/   a fake canvas context shared by renderer tests
 ```
 
-`src/logic` is a one-way boundary: it may not import anything else under
-`src/`, and it may not touch the DOM, `Math.random`, or the clock — both
-mechanically enforced by `eslint.config.js`. Randomness, time and storage
-are passed into it as parameters instead. See `docs/adr/` (ADR-0001 and
+The DOM itself isn't confined to `main.ts`, though: `renderer` owns the
+canvas (sizing, drawing context) and `persistence`'s default storage
+implementation owns `localStorage` — each layer holds a narrow, named
+slice of the platform rather than routing every access through the
+composition boundary. `src/logic` is the one layer where purity is
+mechanically enforced, not just conventional: it may not import anything
+else under `src/`, nor touch the DOM, `Math.random`, or the clock, all
+via the `eslint.config.js` allow-list. Randomness, time and storage are
+passed into it as parameters instead. See `docs/adr/` (ADR-0001 and
 ADR-0008 in particular) for why.
 
 ### Tests
