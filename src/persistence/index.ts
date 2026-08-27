@@ -11,7 +11,7 @@
  * `src/logic`), see issue #7's ticket brief.
  *
  * `localStorage` is injected, not read directly — the same convention as
- * the `rng` in `src/logic` (decision D11) and `FrameSource` in
+ * the `rng` in `src/logic` (ADR-0004) and `FrameSource` in
  * `src/main.ts`: every exported function here takes a `HighscoreStorage`
  * parameter defaulting to `browserLocalStorage`, so this module's own
  * tests exercise it entirely against an in-memory replacement, no DOM
