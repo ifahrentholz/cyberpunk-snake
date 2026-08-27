@@ -74,9 +74,9 @@ export interface TickLoopOptions {
   readonly cancelFrame?: (handle: number) => void;
 }
 
+// The visible log this ticket's exception guard requires; see issue #6 AC
+// "step call ... guarded".
 function defaultOnError(error: unknown): void {
-  // eslint-disable-next-line no-console -- the visible log this ticket's
-  // exception guard requires; see issue #6 AC "step call ... guarded".
   console.error('[cyberpunk-snake] tick loop stopped after an unexpected error', error);
 }
 
