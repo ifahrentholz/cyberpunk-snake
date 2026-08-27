@@ -81,3 +81,28 @@ contributing to the project — not the reasoning itself.
   102 total) now fails if that ever regresses. Side effect: the suite is
   measurably faster (roughly 1.2s to 1.0s). See
   `docs/adr/0005-scoped-test-environment.md`.
+- Playable slice (#6): open the app with `npm run dev` and play — arrow
+  keys or WASD to start and steer, Space pauses and resumes, `R` restarts
+  after game over. This is the first ticket in the project with real,
+  visible user value: the previous five tickets (#2–#5, #13) built the
+  logic, input and toolchain layers with nothing on screen to show for
+  it, and this one wires them together with a fixed ~9-ticks/second
+  `requestAnimationFrame` loop (`src/composition/loop.ts`) and a new
+  canvas renderer (`src/renderer/canvas.ts`) into a running game.
+  **Looks intentionally plain**: solid fills, no cyberpunk palette, glow,
+  background grid, food-pulse animation or scanlines — that visual
+  treatment is issue #16, a separate slice, blocked by this one. The
+  point of shipping it plain first is to let tick rate, control feel and
+  grid size be judged before anyone polishes the visuals on top. **Not
+  published anywhere yet** — GitHub Pages hosting is issue #9; until that
+  lands this only runs locally via `npm run dev`. **No highscore** —
+  that's issue #7; `highscore` currently reads a placeholder. 133 tests
+  now pass across 9 files (verified with a real `npm test` run on this
+  branch). See `docs/adr/0006-playable-slice-loop-and-freeze-guards.md`
+  for the reasoning behind the tick-loop catch-up cap, the freeze-guard
+  criterion derived during review, why `awaitingFirstMove` stays an
+  explicit flag instead of a derived check, the removal of an unused
+  `dispatch` method that could bypass the start-screen gate, and — most
+  important to know before relying on this — the fact that nobody has
+  yet run this game in a real browser; cross-browser behaviour is
+  unverified.

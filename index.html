@@ -4,9 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cyberpunk Snake</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #101018;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #app {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #error-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 0.75rem 1rem;
+        background: #7a1010;
+        color: #ffffff;
+        font-family: monospace;
+        text-align: center;
+      }
+      #error-banner[hidden] {
+        display: none;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+    </div>
+    <div id="error-banner" role="alert" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,18 +1,9 @@
 /**
  * Renderer layer — reads game state and draws to a Canvas 2D context.
  *
- * May import from `logic` only, and must stay read-only with respect to
- * game state. The real renderer lands in issue #6; this is a placeholder so
- * the layer boundary exists.
+ * May import from `logic` only, and stays read-only with respect to game
+ * state. The real renderer (issue #6) lives in `./canvas` and is
+ * re-exported below.
  */
-import { logicPlaceholder, type LogicPlaceholder } from '../logic';
-
-export interface RendererPlaceholder {
-  readonly note: string;
-  readonly logic: LogicPlaceholder;
-}
-
-export const rendererPlaceholder: RendererPlaceholder = {
-  note: 'Canvas rendering lands in issue #6.',
-  logic: logicPlaceholder,
-};
+export { COLORS, render, resizeCanvas, computeCanvasMetrics } from './canvas';
+export type { CanvasMetrics } from './canvas';
