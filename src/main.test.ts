@@ -308,4 +308,82 @@ describe('composeApp', () => {
     expect(app.getHighscore()).toBe(5);
     expect(readHighscore(storage)).toBe(5);
   });
+
+  it('issue #7 AC6: a storage that throws on getItem AND setItem does not make the game unplayable', () => {
+    // Both `getItem` and `setItem` throw — AC6 explicitly calls out
+    // `setItem` as the worse case (it only fires at game end, so a gap
+    // there is easy to miss if only `getItem` is exercised).
+    const throwingStorage: HighscoreStorage = {
+      getItem: () => {
+        throw new Error('getItem is blocked (e.g. Safari private mode)');
+      },
+      setItem: () => {
+        throw new Error('setItem is blocked (e.g. Safari private mode quota)');
+      },
+    };
+    const source = makeFakeFrameSource();
+    // Pins the score to 1 at game end (same R, same reasoning, as the
+    // "persists a new highscore" test above) so `recordHighscore`
+    // actually reaches `storage.setItem` — with a throwing `getItem`,
+    // `readHighscore` always reports a current highscore of 0, so a
+    // score of 0 would never even attempt `setItem` (`0 <= 0` short-
+    // circuits first) and this test would pass without ever exercising
+    // the guard it exists to prove. Confirmed the hard way: an earlier
+    // draft left `Math.random` unmocked and stayed green even with
+    // `recordHighscore`'s `setItem` try/catch deleted, because the real
+    // random food placement happened to yield a score of 0 that run.
+    vi.spyOn(Math, 'random').mockReturnValue(0.5179);
+
+    // Construction itself must not throw: `composeApp` reads the
+    // highscore at startup (a throwing `getItem`), and if that
+    // propagated instead of being swallowed, this line would fail the
+    // test right here with a thrown error — an explicit `not.toThrow()`
+    // wrapper would only lose TypeScript's narrowing on `app` for every
+    // line below without adding anything this doesn't already prove.
+    app = composeApp(document, { requestFrame: source.requestFrame, cancelFrame: source.cancelFrame }, throwingStorage);
+
+    const banner = document.getElementById('error-banner');
+    expect(banner).not.toBeNull();
+    expect(banner?.hidden).toBe(true);
+    // Startup itself reads the highscore; a throwing `getItem` must
+    // still leave a usable value rather than propagating.
+    expect(app.getHighscore()).toBe(0);
+
+    pressDirection(document, 'ArrowRight');
+
+    // Drive the *real* tick loop via the injected frame source instead of
+    // calling `advanceTick()` directly (as the other two issue #7 tests
+    // above do): only this path runs `dispatch` through
+    // `startTickLoop`'s `onTick` try/catch (issue #6's freeze guard), so
+    // only this path can actually prove that guard does not misfire on a
+    // throwing storage access. `TICK_MS` mirrors main.ts's private
+    // 9 Hz tick rate (AC1); the snake starts at grid-centre x=14 on a
+    // 28-wide grid moving right and its head advances by exactly one
+    // cell per tick regardless of whether it eats along the way, so it
+    // reaches the wall — and 'over' — after exactly 14 ticks. The
+    // pinned `Math.random` above additionally guarantees it eats food
+    // once on the way (score 1), so this is the path where
+    // `recordHighscore` is actually called with a genuinely-improving,
+    // non-zero score against this throwing storage.
+    const TICK_MS = 1000 / 9;
+    source.fire(0); // seeds the clock, no elapsed time yet
+    let elapsedMs = 0;
+    for (let i = 0; i < 20 && app.getState().status !== 'over'; i += 1) {
+      elapsedMs += TICK_MS;
+      source.fire(elapsedMs);
+    }
+
+    expect(app.getState().status).toBe('over');
+    expect(app.getHighscore()).toBe(0);
+    expect(banner?.hidden).toBe(true);
+
+    // The loop is still alive: a throwing storage access at the exact
+    // moment of game-over must not have tripped the #6 freeze guard.
+    // Further frames keep rendering without throwing.
+    expect(() => {
+      elapsedMs += TICK_MS;
+      source.fire(elapsedMs);
+    }).not.toThrow();
+    expect(banner?.hidden).toBe(true);
+  });
 });
