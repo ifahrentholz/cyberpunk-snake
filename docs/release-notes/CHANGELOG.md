@@ -146,3 +146,16 @@ contributing to the project — not the reasoning itself.
   the composition-level AC6 test proved nothing, because an unmocked
   `Math.random` let it short-circuit past the code path it was meant to
   exercise.
+- Project README (#8): the project is now documented for someone who
+  didn't build it — how to run it (`npm install && npm run dev`),
+  controls, the four development commands, project structure, and the
+  test-environment conventions (default `node`, opt-in `jsdom` pragma,
+  where each opts-in file lives). **No player-visible change** — this
+  is the same game shipped in #7, described rather than altered. The
+  "play it live" link is a placeholder until #9 (GitHub Pages hosting)
+  replaces it. 183 tests still pass across 11 files (unchanged from #7
+  — no product code touched by this ticket). See
+  `docs/adr/0009-documentation-claims-are-falsifiable-too.md` for the
+  reasoning, including the platform-ownership model (which layer owns
+  which browser primitive) this ticket made explicit for the first
+  time.
