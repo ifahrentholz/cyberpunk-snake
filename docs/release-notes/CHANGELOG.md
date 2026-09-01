@@ -181,3 +181,32 @@ contributing to the project — not the reasoning itself.
   boundary between what was measured locally and what is trusted about
   GitHub's own Pages behaviour — this project's second application of
   ADR-0009's falsifiability standard.
+
+### Fixed
+
+- Deploy pipeline (#22): the GitHub Actions deploy workflow set up in #9
+  failed on its very first real run — `npm ci` exited before any of
+  `Test`, `Typecheck`, `Lint`, `Build` or the Pages steps could execute,
+  and the `deploy` job never started. Between #9's merge and this fix,
+  **nothing was published**; the game was not reachable at
+  `https://ifahrentholz.de/cyberpunk-snake/` at any point in that
+  window. The fix is a single file: `package-lock.json`, regenerated
+  under the same npm version (11.17.0) the CI runner uses (370 → 369
+  `packages` entries, 232 insertions / 195 deletions). `package.json` is
+  unchanged — no dependency was added, removed or bumped in the
+  manifest itself; this is a lockfile-consistency fix, not a dependency
+  update. The initial ticket diagnosis blamed Linux portability; the
+  actual cause was an npm-version mismatch (npm 11.6.2, this project's
+  local engine, accepted a peer-dependency nesting that npm 11.17.0, the
+  CI engine, rejects). 183 tests still pass across 11 files (unchanged
+  — no product or test code touched by this ticket), and the
+  import-boundary guard from #2 (`tests/import-boundary.test.ts`) is
+  byte-identical to `main` and stays green. See
+  `docs/adr/0011-lockfile-npm-engine-drift.md` for the corrected root
+  cause, why the resulting 35-package version delta was accepted rather
+  than pinned, a measured gap where a plain local `npm install` can
+  silently revert this fix (and why that does not block this ticket),
+  and an open, unimplemented options matrix for closing that gap going
+  forward. Whether the deploy workflow now actually completes and the
+  page becomes reachable is observable only after this change reaches
+  `main` and the workflow runs again — not claimed here.
