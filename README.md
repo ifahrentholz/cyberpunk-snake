@@ -13,7 +13,7 @@ npm run dev
 Developed and tested on Node 24. Open the URL Vite prints. Press an
 arrow key or `WASD` to start.
 
-Play it live: _will be added with #9 (GitHub Pages deployment)._
+Play it live: <https://ifahrentholz.de/cyberpunk-snake/> — GitHub Pages reports this URL for the repo (its API lists it as http://, but requests are actually served over https via the domain's Cloudflare front); it becomes reachable once the deploy workflow runs after merge, and that has not been observed yet from this branch.
 
 ### Controls
 

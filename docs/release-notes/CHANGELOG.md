@@ -159,3 +159,25 @@ contributing to the project — not the reasoning itself.
   reasoning, including the platform-ownership model (which layer owns
   which browser primitive) this ticket made explicit for the first
   time.
+- GitHub Pages deployment (#9): the game is now built and published by a
+  GitHub Actions workflow on every push to `main`, replacing the manual
+  step this project relied on before. The README's live link now points
+  at `https://ifahrentholz.de/cyberpunk-snake/` — the URL GitHub reports
+  for this repo's Pages site, served over the account's custom domain
+  rather than the default `*.github.io` host. That link becomes reachable
+  once the deploy workflow has run at least once after this PR merges to
+  `main`; as of this entry it has not run yet, and the URL is not yet
+  live (confirmed: it currently 404s from GitHub's own origin). No
+  player-visible change to the game itself — same game shipped in #8,
+  now reachable without a checkout once the first deploy completes. 183
+  tests still pass across 11 files (unchanged from #8 — no product code
+  touched by this ticket). See
+  `docs/adr/0010-github-pages-deployment.md` for the reasoning behind
+  keeping Vite's `base` relative rather than the repository-path form
+  AC1 names, the trailing-slash redirect that relative value depends on,
+  why the deploy workflow runs the full four-gate suite rather than only
+  the build AC2 names, the `permissions`-scoping hardening that was
+  proposed and rejected pending a first real run, and the evidence
+  boundary between what was measured locally and what is trusted about
+  GitHub's own Pages behaviour — this project's second application of
+  ADR-0009's falsifiability standard.
